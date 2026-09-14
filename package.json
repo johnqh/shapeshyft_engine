@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/shapeshyft_engine",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Stateless LLM structured-output engine shared by ShapeShyft and ShapeRouter",
   "type": "module",
   "main": "./dist/index.js",
@@ -47,7 +47,7 @@
     "@google/generative-ai": "^0.21.0",
     "groq-sdk": "^0.37.0",
     "openai": "^4.77.0",
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.4"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
@@ -79,7 +79,7 @@
     "groq-sdk": "^0.37.0",
     "openai": "^4.77.0",
     "prettier": "^3.7.4",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.4"
   },
