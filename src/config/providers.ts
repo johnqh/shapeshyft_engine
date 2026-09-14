@@ -6,16 +6,17 @@
  *
  * ## Supported Providers
  *
- * Catalog verified against provider documentation on 2026-08-18.
+ * Catalog verified against provider documentation on 2026-08-18; pricing
+ * re-verified against each provider's pricing page on 2026-09-14.
  *
  * - **openai**: GPT-5.6 (Sol/Terra/Luna), GPT-5.5, GPT-5.4, GPT-5, GPT-4.1, GPT-4o
  * - **anthropic**: Claude Fable 5, Opus 5, Sonnet 5, Haiku 4.5 (+ Opus 4.8/4.7/4.6, Sonnet 4.6)
  * - **gemini**: Gemini 3.7/3.6/3.5/3.1 and 2.5, Nano Banana image models, Veo 3.1 video
- * - **mistral**: Mistral Large 3, Medium 3.5, Small 4, Ministral 3, Codestral, OCR
+ * - **mistral**: Mistral Large 3, Medium 3.5, Small 4, Ministral 3, Codestral
  * - **cohere**: Command A+, Command A (reasoning/vision/translate), Command R
  * - **groq**: GPT-OSS, Qwen3.6, MiniMax M2.7, Compound, Whisper
  * - **xai**: Grok 4.6, 4.5, 4.3, Grok 4.20 variants, Grok Build
- * - **deepseek**: DeepSeek V4 Pro and V4 Flash
+ * - **deepseek**: DeepSeek V4.1 Flash and V4 Pro
  * - **perplexity**: Sonar models with live web search grounding
  * - **lm_studio**: Local LLM server (LM Studio or any OpenAI-compatible endpoint)
  *
@@ -30,6 +31,10 @@
  * `llama-3.1-8b-instant` on 2026-08-16, and both were listed here until then.
  *
  * Pricing is in **cents per 1M tokens** (image per image, audio/video per minute).
+ * `estimateUsageCost` (`lib/cost-estimation.ts`) prices a call from these rates
+ * plus the optional refinements on `ModelPricing`: cached and audio input,
+ * long-context tiers, peak hours, and per-request and per-search fees. A rate a
+ * provider does not publish is left out rather than guessed.
  *
  * ## LM Studio Model Identifiers
  *
@@ -146,9 +151,9 @@ export const PROVIDERS: ProviderConfig[] = [
   {
     id: "deepseek",
     name: "DeepSeek",
-    description: "DeepSeek V4 Pro and V4 Flash models",
+    description: "DeepSeek V4.1 Flash and V4 Pro models",
     allowsCustomModel: false,
-    defaultModel: "deepseek-v4-flash",
+    defaultModel: "deepseek-flash",
     requiresEndpointUrl: false,
   },
   {
@@ -244,7 +249,7 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
     "ministral-3b-2512",
     "codestral-latest",
     "codestral-2508",
-    "mistral-ocr-latest",
+    // No OCR model: Mistral serves OCR only at /v1/ocr, never chat completions.
   ],
   cohere: [
     "command-a-plus-05-2026",
@@ -276,7 +281,12 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
     "grok-4.20-multi-agent-0309",
     "grok-build-0.1",
   ],
-  deepseek: ["deepseek-v4-pro", "deepseek-v4-flash"],
+  deepseek: [
+    "deepseek-flash", // V4.1 Flash (2026-09-10)
+    "deepseek-v4-pro",
+    // Retired V4 Flash ID; DeepSeek currently serves it with V4.1 Flash
+    "deepseek-v4-flash",
+  ],
   perplexity: [
     "sonar",
     "sonar-pro",
@@ -863,15 +873,6 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     audioOutput: false,
     videoOutput: false,
   },
-  "mistral-ocr-latest": {
-    visionInput: true,
-    audioInput: false,
-    videoInput: false,
-    imageOutput: false,
-    audioOutput: false,
-    videoOutput: false,
-    mediaFormats: { imageFormats: ["url", "base64"] },
-  },
 
   // Cohere — https://docs.cohere.com/docs/models
   "command-a-plus-05-2026": {
@@ -1088,6 +1089,14 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
   },
 
   // DeepSeek — https://api-docs.deepseek.com/quick_start/pricing (standard, cache miss)
+  "deepseek-flash": {
+    visionInput: false,
+    audioInput: false,
+    videoInput: false,
+    imageOutput: false,
+    audioOutput: false,
+    videoOutput: false,
+  },
   "deepseek-v4-pro": {
     visionInput: false,
     audioInput: false,
@@ -1306,25 +1315,89 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
 // Model Pricing (cents per 1M tokens)
 // =============================================================================
 
-export const MODEL_PRICING: Record<string, ModelPricing> = {
-  // OpenAI — https://developers.openai.com/api/docs/models
-  "gpt-5.6-sol": { input: 500, output: 3000 },
-  "gpt-5.6-terra": { input: 200, output: 1200 },
-  "gpt-5.6-luna": { input: 20, output: 120 },
-  "gpt-5.5": { input: 500, output: 3000 },
-  "gpt-5.4": { input: 250, output: 1500 },
-  "gpt-5.4-mini": { input: 75, output: 450 },
-  "gpt-5.4-nano": { input: 20, output: 125 },
-  "gpt-5": { input: 125, output: 1000 },
-  "gpt-5-mini": { input: 25, output: 200 },
-  "gpt-5-nano": { input: 5, output: 40 },
-  "gpt-4.1": { input: 200, output: 800 },
-  "gpt-4.1-mini": { input: 40, output: 160 },
-  "gpt-4.1-nano": { input: 10, output: 40 },
-  "gpt-4o": { input: 250, output: 1000 },
-  "gpt-4o-mini": { input: 15, output: 60 },
+/** DeepSeek bills 2x during these weekday UTC hours. */
+const DEEPSEEK_PEAK: ModelPricing["peak"] = {
+  multiplier: 2,
+  windowsUtc: [
+    { days: [1, 2, 3, 4, 5], startHour: 1, endHour: 4 },
+    { days: [1, 2, 3, 4, 5], startHour: 6, endHour: 10 },
+  ],
+};
 
-  // Anthropic — https://platform.claude.com/docs/en/about-claude/models/overview
+export const MODEL_PRICING: Record<string, ModelPricing> = {
+  // OpenAI — https://developers.openai.com/api/docs/pricing
+  // Cached input is 0.1x. GPT-5.6 also bills cache writes at 1.25x input.
+  // web_search_preview: $10 / 1K calls on reasoning models (GPT-5 family),
+  // $25 / 1K on GPT-4.1 and GPT-4o.
+  // Sol is on promotion "at least through November 21, 2026"; list is 500 / 3000.
+  "gpt-5.6-sol": {
+    input: 400,
+    output: 2000,
+    cachedInput: 40,
+    cacheWriteInput: 500,
+    searchCall: 1,
+    longContext: {
+      minPromptTokens: 272_001,
+      input: 800,
+      output: 3000,
+      cachedInput: 80,
+    },
+  },
+  "gpt-5.6-terra": {
+    input: 200,
+    output: 1200,
+    cachedInput: 20,
+    cacheWriteInput: 250,
+    searchCall: 1,
+    longContext: {
+      minPromptTokens: 272_001,
+      input: 400,
+      output: 1800,
+      cachedInput: 40,
+    },
+  },
+  "gpt-5.6-luna": {
+    input: 20,
+    output: 120,
+    cachedInput: 2,
+    cacheWriteInput: 25,
+    searchCall: 1,
+    longContext: {
+      minPromptTokens: 272_001,
+      input: 40,
+      output: 180,
+      cachedInput: 4,
+    },
+  },
+  // 5.5 / 5.4 long context: "2x input and 1.5x output for the full session"
+  "gpt-5.5": {
+    input: 500,
+    output: 3000,
+    cachedInput: 50,
+    searchCall: 1,
+    longContext: { minPromptTokens: 272_001, input: 1000, output: 4500 },
+  },
+  "gpt-5.4": {
+    input: 250,
+    output: 1500,
+    cachedInput: 25,
+    searchCall: 1,
+    longContext: { minPromptTokens: 272_001, input: 500, output: 2250 },
+  },
+  "gpt-5.4-mini": { input: 75, output: 450, cachedInput: 7.5, searchCall: 1 },
+  "gpt-5.4-nano": { input: 20, output: 125, cachedInput: 2, searchCall: 1 },
+  "gpt-5": { input: 125, output: 1000, cachedInput: 12.5, searchCall: 1 },
+  "gpt-5-mini": { input: 25, output: 200, cachedInput: 2.5, searchCall: 1 },
+  "gpt-5-nano": { input: 5, output: 40, cachedInput: 0.5, searchCall: 1 },
+  "gpt-4.1": { input: 200, output: 800, cachedInput: 50, searchCall: 2.5 },
+  "gpt-4.1-mini": { input: 40, output: 160, cachedInput: 10, searchCall: 2.5 },
+  "gpt-4.1-nano": { input: 10, output: 40, cachedInput: 2.5, searchCall: 2.5 }, // Shuts down 2026-10-23
+  "gpt-4o": { input: 250, output: 1000, cachedInput: 125, searchCall: 2.5 },
+  "gpt-4o-mini": { input: 15, output: 60, cachedInput: 7.5, searchCall: 2.5 },
+
+  // Anthropic — https://platform.claude.com/docs/en/about-claude/pricing
+  // 4.6 and later: full 1M context at standard rates, no long-context surcharge.
+  // No cachedInput: the adapter sends no cache_control, so nothing is cached.
   "claude-fable-5": { input: 1000, output: 5000 },
   "claude-opus-5": { input: 500, output: 2500 },
   "claude-sonnet-5": { input: 200, output: 1000 },
@@ -1334,113 +1407,91 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "claude-opus-4-6": { input: 500, output: 2500 },
   "claude-sonnet-4-6": { input: 300, output: 1500 },
   "claude-opus-4-5-20251101": { input: 500, output: 2500 },
-  "claude-sonnet-4-5-20250929": { input: 300, output: 1500 },
+  "claude-sonnet-4-5-20250929": { input: 300, output: 1500 }, // Retires 2026-09-29
 
-  // Google Gemini — https://ai.google.dev/gemini-api/docs/models
+  // Google Gemini — https://ai.google.dev/gemini-api/docs/pricing
+  // Images, video and (unless audioTokenInput says otherwise) audio are billed
+  // as input tokens at `input`; output includes thinking tokens.
   "gemini-3.7-flash": {
     input: 75,
     output: 375,
-    imageInput: 39,
-    audioInput: 10,
-    videoInput: 39,
+    cachedInput: 7.5,
+    priceChanges: [
+      { from: "2027-01-01", input: 150, output: 750, cachedInput: 15 },
+    ],
   },
   "gemini-3.6-flash": {
     input: 75,
     output: 375,
-    imageInput: 39,
-    audioInput: 10,
-    videoInput: 39,
+    cachedInput: 7.5,
+    priceChanges: [
+      { from: "2027-01-01", input: 150, output: 750, cachedInput: 15 },
+    ],
   },
-  "gemini-3.5-flash": {
-    input: 150,
-    output: 900,
-    imageInput: 39,
-    audioInput: 10,
-    videoInput: 39,
-  },
-  "gemini-3.5-flash-lite": {
-    input: 30,
-    output: 250,
-    imageInput: 30,
-    audioInput: 50,
-    videoInput: 30,
-  },
+  "gemini-3.5-flash": { input: 150, output: 900, cachedInput: 15 },
+  "gemini-3.5-flash-lite": { input: 30, output: 250, cachedInput: 3 },
   "gemini-3.1-flash-lite": {
     input: 25,
     output: 150,
-    imageInput: 25,
-    audioInput: 50,
-    videoInput: 25,
-  },
+    cachedInput: 2.5,
+    audioTokenInput: 50,
+  }, // Shuts down 2027-05-07
   "gemini-3.1-pro-preview": {
     input: 200,
     output: 1200,
-    imageInput: 32.9,
-    audioInput: 10,
-    videoInput: 32.9,
+    cachedInput: 20,
+    longContext: {
+      minPromptTokens: 200_001,
+      input: 400,
+      output: 1800,
+      cachedInput: 40,
+    },
   },
   "gemini-3-flash-preview": {
-    input: 75,
-    output: 375,
-    imageInput: 39,
-    audioInput: 10,
-    videoInput: 39,
+    input: 50,
+    output: 300,
+    cachedInput: 5,
+    audioTokenInput: 100,
   },
-  "gemini-3.1-flash-image": {
-    input: 75,
-    output: 375,
-    imageInput: 39,
-    imageOutput: 3.9,
-  }, // Nano Banana 2
-  "gemini-3.1-flash-lite-image": {
-    input: 25,
-    output: 150,
-    imageInput: 25,
-    imageOutput: 2.4,
-  }, // Nano Banana 2 Lite
-  "gemini-3-pro-image": {
-    input: 125,
-    output: 1000,
-    imageInput: 32.9,
-    imageOutput: 12,
-  }, // Nano Banana Pro
+  "gemini-3.1-flash-image": { input: 50, output: 300, imageOutput: 6.7 }, // Nano Banana 2; per image at 1K (4.5 at 0.5K, 10.1 at 2K, 15.1 at 4K)
+  "gemini-3.1-flash-lite-image": { input: 25, output: 150, imageOutput: 3.36 }, // Nano Banana 2 Lite; per image at 1K
+  "gemini-3-pro-image": { input: 200, output: 1200, imageOutput: 13.4 }, // Nano Banana Pro; per image at 1K/2K (24 at 4K)
   "gemini-2.5-pro": {
     input: 125,
     output: 1000,
-    imageInput: 32.9,
-    audioInput: 10,
-    videoInput: 32.9,
+    cachedInput: 12.5,
+    longContext: {
+      minPromptTokens: 200_001,
+      input: 250,
+      output: 1500,
+      cachedInput: 25,
+    },
   },
   "gemini-2.5-flash": {
     input: 30,
     output: 250,
-    imageInput: 30,
-    audioInput: 100,
-    videoInput: 30,
+    cachedInput: 3,
+    audioTokenInput: 100,
   },
   "gemini-2.5-flash-lite": {
     input: 10,
     output: 40,
-    imageInput: 10,
-    audioInput: 30,
-    videoInput: 10,
+    cachedInput: 1,
+    audioTokenInput: 30,
   },
-  "gemini-2.5-flash-image": {
-    input: 30,
-    output: 250,
-    imageInput: 30,
-    imageOutput: 3.9,
-  },
+  "gemini-2.5-flash-image": { input: 30, output: 250, imageOutput: 3.9 }, // Shuts down 2026-10-02
   "gemini-2.5-flash-native-audio-preview-12-2025": {
-    input: 30,
-    output: 250,
-    audioInput: 100,
-    audioOutput: 200,
-  },
-  "veo-3.1-generate-preview": { input: 0, output: 0, videoOutput: 4000 }, // priced per second of video
-  "veo-3.1-lite-generate-preview": { input: 0, output: 0, videoOutput: 1500 }, // priced per second of video
+    input: 50,
+    output: 200,
+    audioTokenInput: 300,
+  }, // Audio output is $12 / 1M tokens
+  // Veo is billed per second of video; stored per minute as ModelPricing expects.
+  "veo-3.1-generate-preview": { input: 0, output: 0, videoOutput: 2400 }, // $0.40/s at 720p/1080p, $0.60/s at 4K
+  "veo-3.1-lite-generate-preview": { input: 0, output: 0, videoOutput: 300 }, // $0.05/s at 720p, $0.08/s at 1080p
 
-  // Mistral — https://docs.mistral.ai/getting-started/models/models_overview/
+  // Mistral — https://mistral.ai/pricing/api
+  // Cached input is "up to 90%" cheaper; the exact rate is unpublished, so
+  // cached tokens are priced at the full input rate.
   "mistral-large-latest": { input: 50, output: 150 },
   "mistral-large-2512": { input: 50, output: 150 },
   "mistral-medium-latest": { input: 150, output: 750 },
@@ -1451,11 +1502,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "ministral-3b-2512": { input: 10, output: 10 },
   "codestral-latest": { input: 30, output: 90 },
   "codestral-2508": { input: 30, output: 90 },
-  "mistral-ocr-latest": { input: 100, output: 300 }, // document OCR
 
   // Cohere — https://docs.cohere.com/docs/models
-  "command-a-plus-05-2026": { input: 250, output: 1000 },
   "command-a-03-2025": { input: 250, output: 1000 },
+  // No published token price for A+, Reasoning, Vision, or Translate: free up
+  // to rate limits, production use via Model Vault or sales. Command A's rate
+  // is assumed.
+  "command-a-plus-05-2026": { input: 250, output: 1000 },
   "command-a-reasoning-08-2025": { input: 250, output: 1000 },
   "command-a-vision-07-2025": { input: 250, output: 1000 },
   "command-a-translate-08-2025": { input: 250, output: 1000 },
@@ -1464,34 +1517,138 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "command-r-08-2024": { input: 15, output: 60 },
 
   // Groq — https://console.groq.com/docs/models
-  "openai/gpt-oss-120b": { input: 15, output: 75 },
-  "openai/gpt-oss-20b": { input: 10, output: 50 },
-  "qwen/qwen3.6-27b": { input: 29, output: 59 },
+  "openai/gpt-oss-120b": { input: 15, output: 60, cachedInput: 7.5 },
+  "openai/gpt-oss-20b": { input: 7.5, output: 30, cachedInput: 3.75 },
+  "qwen/qwen3.6-27b": { input: 60, output: 300 },
+  // Enterprise only, "Contact Sales"; no public price. Last public rate kept.
   "minimaxai/minimax-m2.7": { input: 29, output: 115 },
-  "groq/compound": { input: 15, output: 75 },
-  "groq/compound-mini": { input: 10, output: 50 },
-  "whisper-large-v3": { input: 11, output: 0 }, // per hour of audio
-  "whisper-large-v3-turbo": { input: 4, output: 0 }, // per hour of audio
+  // Compound is priced from its per-model and per-tool breakdown
+  // (`compoundCostCents`); these rates apply only when a response lacks one.
+  "groq/compound": { input: 15, output: 60 },
+  "groq/compound-mini": { input: 15, output: 60 },
+  // Whisper, per minute of audio ($0.111 and $0.04 per hour), 10 s minimum
+  "whisper-large-v3": { input: 0, output: 0, audioInput: 0.185 },
+  "whisper-large-v3-turbo": { input: 0, output: 0, audioInput: 0.04 / 0.6 },
 
   // xAI — https://docs.x.ai/docs/models
-  "grok-4.6": { input: 200, output: 600 },
-  "grok-4.5": { input: 200, output: 600 },
-  "grok-4.3": { input: 125, output: 250 },
-  "grok-4.20-0309-reasoning": { input: 125, output: 250 },
-  "grok-4.20-0309-non-reasoning": { input: 125, output: 250 },
-  "grok-4.20-multi-agent-0309": { input: 125, output: 250 },
-  "grok-build-0.1": { input: 100, output: 200 },
+  // Responses carry the billed amount (`cost_in_usd_ticks`), which is used when
+  // present. Prompts of 200K tokens or more bill every token at 2x.
+  "grok-4.6": {
+    input: 200,
+    output: 600,
+    cachedInput: 50,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 400,
+      output: 1200,
+      cachedInput: 100,
+    },
+  },
+  "grok-4.5": {
+    input: 200,
+    output: 600,
+    cachedInput: 30,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 400,
+      output: 1200,
+      cachedInput: 60,
+    },
+  },
+  "grok-4.3": {
+    input: 125,
+    output: 250,
+    cachedInput: 20,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 250,
+      output: 500,
+      cachedInput: 40,
+    },
+  },
+  "grok-4.20-0309-reasoning": {
+    input: 125,
+    output: 250,
+    cachedInput: 20,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 250,
+      output: 500,
+      cachedInput: 40,
+    },
+  },
+  "grok-4.20-0309-non-reasoning": {
+    input: 125,
+    output: 250,
+    cachedInput: 20,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 250,
+      output: 500,
+      cachedInput: 40,
+    },
+  },
+  "grok-4.20-multi-agent-0309": {
+    input: 125,
+    output: 250,
+    cachedInput: 20,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 250,
+      output: 500,
+      cachedInput: 40,
+    },
+  },
+  "grok-build-0.1": {
+    input: 100,
+    output: 200,
+    cachedInput: 20,
+    longContext: {
+      minPromptTokens: 200_000,
+      input: 200,
+      output: 400,
+      cachedInput: 40,
+    },
+  },
 
-  // DeepSeek — https://api-docs.deepseek.com/quick_start/pricing (standard, cache miss)
-  "deepseek-v4-pro": { input: 66, output: 198 },
-  "deepseek-v4-flash": { input: 22, output: 66 },
+  // DeepSeek — https://api-docs.deepseek.com/quick_start/pricing
+  // Off-peak rates; peak hours (01:00-04:00 and 06:00-10:00 UTC, Mon-Fri) bill
+  // at 2x. V4.1 Flash repriced 2026-09-10; `deepseek-v4-flash` now runs on it.
+  "deepseek-flash": {
+    input: 15,
+    output: 60,
+    cachedInput: 0.3,
+    peak: DEEPSEEK_PEAK,
+  },
+  "deepseek-v4-pro": {
+    input: 66,
+    output: 198,
+    cachedInput: 2.2,
+    peak: DEEPSEEK_PEAK,
+  },
+  "deepseek-v4-flash": {
+    input: 15,
+    output: 60,
+    cachedInput: 0.3,
+    peak: DEEPSEEK_PEAK,
+  },
 
-  // Perplexity — https://docs.perplexity.ai (per-request search fees are billed separately)
-  sonar: { input: 100, output: 100 },
-  "sonar-pro": { input: 300, output: 1500 },
-  "sonar-pro-search": { input: 300, output: 1500 },
-  "sonar-reasoning-pro": { input: 200, output: 800 },
-  "sonar-deep-research": { input: 200, output: 800 },
+  // Perplexity — https://docs.perplexity.ai/docs/getting-started/pricing
+  // Responses carry the billed amount (`usage.cost.total_cost`), which is used
+  // when present. The request fee below is the default (low) search context.
+  // Sonar is supported until 2026-09-27, then replaced by the Agent API.
+  sonar: { input: 100, output: 100, requestFee: 0.5 },
+  "sonar-pro": { input: 300, output: 1500, requestFee: 0.6 },
+  // Not a real model ID: Pro Search is sonar-pro with search_type "pro"
+  "sonar-pro-search": { input: 300, output: 1500, requestFee: 1.4 },
+  "sonar-reasoning-pro": { input: 200, output: 800, requestFee: 0.6 },
+  "sonar-deep-research": {
+    input: 200,
+    output: 800,
+    citationTokens: 200,
+    reasoningTokens: 300,
+    searchCall: 0.5,
+  },
 
   // LM Studio / custom OpenAI-compatible servers — self-hosted, no per-token cost
   "qwen3-8b": { input: 0, output: 0 },
@@ -1550,17 +1707,57 @@ export function getModelCapabilities(model: string): ModelCapabilities {
   return MODEL_CAPABILITIES[model] ?? {};
 }
 
+/** Self-hosted models cost nothing per token, whatever they are called. */
+const FREE_PRICING: ModelPricing = { input: 0, output: 0 };
+
+/**
+ * Snapshot suffixes providers append to a model they report back:
+ * `gpt-4.1-mini-2025-04-14` (OpenAI) and `claude-haiku-4-5-20251001`
+ * (Anthropic, for an alias).
+ */
+const SNAPSHOT_SUFFIX = /-(\d{4}-\d{2}-\d{2}|\d{8})$/;
+
+export interface ModelPricingLookup {
+  /** The provider serving the model. `lm_studio` is always free. */
+  provider?: LlmProvider;
+  /** The model the endpoint asked for, tried when the reported one is unknown. */
+  configuredModel?: string | null;
+}
+
+function catalogPricing(model: string | null | undefined) {
+  if (!model) return undefined;
+  return (
+    MODEL_PRICING[model] ?? MODEL_PRICING[model.replace(SNAPSHOT_SUFFIX, "")]
+  );
+}
+
+/**
+ * Pricing for a model, or undefined when the catalog does not know it.
+ *
+ * Tries the model as reported, then without a snapshot suffix, then the same
+ * for `configuredModel`.
+ */
+export function findModelPricing(
+  model: string,
+  options: ModelPricingLookup = {}
+): ModelPricing | undefined {
+  if (options.provider === "lm_studio") return FREE_PRICING;
+  return catalogPricing(model) ?? catalogPricing(options.configuredModel);
+}
+
 /**
  * Get pricing for a specific model (cents per 1M tokens).
- * Returns DEFAULT_MODEL_PRICING for unknown models.
- * @param model - The model identifier
+ * Returns DEFAULT_MODEL_PRICING for unknown models, and zero for any model on a
+ * self-hosted (`lm_studio`) server.
+ * @param model - The model identifier, as reported by the provider
+ * @param options - Provider and configured model, for a more reliable match
  * @returns Model pricing
  */
-export function getModelPricing(model: string): ModelPricing {
-  // Try exact match first, then strip date suffix (e.g., "gpt-4.1-mini-2025-04-14" -> "gpt-4.1-mini")
-  if (MODEL_PRICING[model]) return MODEL_PRICING[model]!;
-  const baseModel = model.replace(/-\d{4}-\d{2}-\d{2}$/, "");
-  return MODEL_PRICING[baseModel] ?? DEFAULT_MODEL_PRICING;
+export function getModelPricing(
+  model: string,
+  options: ModelPricingLookup = {}
+): ModelPricing {
+  return findModelPricing(model, options) ?? DEFAULT_MODEL_PRICING;
 }
 
 /**

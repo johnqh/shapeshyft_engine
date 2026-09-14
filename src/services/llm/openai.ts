@@ -17,6 +17,7 @@ import {
   type ILLMProvider,
   type LLMRequest,
   type LLMResponse,
+  type LLMUsage,
   type ProviderConfig,
 } from "./types.js";
 import { getOpenAIAudioFormat } from "../../lib/media-constants.js";
@@ -27,6 +28,38 @@ import {
   buildWebSearchRoutingSection,
 } from "../../lib/prompt-builder.js";
 import { normalizeFinishReason } from "./finish-reason.js";
+import { addUsage, compatibleUsage } from "./compatible-usage.js";
+import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
+
+/** Usage from a Responses API response, which names its fields differently. */
+function responsesUsage(response: OpenAI.Responses.Response): LLMUsage {
+  const inputTokens = response.usage?.input_tokens ?? 0;
+  const outputTokens = response.usage?.output_tokens ?? 0;
+  const inputDetails = response.usage?.input_tokens_details as
+    { cached_tokens?: number; cache_write_tokens?: number } | undefined;
+  const cached = inputDetails?.cached_tokens ?? 0;
+  // GPT-5.6+ bills cache writes at 1.25x input; older SDK types omit the field.
+  const cacheWrite = inputDetails?.cache_write_tokens ?? 0;
+  const reasoning =
+    response.usage?.output_tokens_details?.reasoning_tokens ?? 0;
+  // Only `search` actions carry the tool fee; `open_page` and `find_in_page`
+  // are web_search_call items too, but free.
+  const searches = response.output.filter(
+    item =>
+      item.type === "web_search_call" &&
+      ((item as { action?: { type?: string } }).action?.type ?? "search") ===
+        "search"
+  ).length;
+  return {
+    promptTokens: inputTokens,
+    completionTokens: outputTokens,
+    totalTokens: response.usage?.total_tokens ?? inputTokens + outputTokens,
+    ...(cached ? { cachedInputTokens: cached } : {}),
+    ...(cacheWrite ? { cacheWriteInputTokens: cacheWrite } : {}),
+    ...(reasoning ? { reasoningTokens: reasoning } : {}),
+    ...(searches ? { searchCalls: searches } : {}),
+  };
+}
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 
@@ -262,10 +295,16 @@ export class OpenAIProvider implements ILLMProvider {
       }
     }
 
+    const usage = compatibleUsage(response.usage);
+
     // Extract structured response from function call
     const toolCall = response.choices[0]?.message.tool_calls?.[0];
     if (!toolCall || toolCall.function.name !== "structured_response") {
-      throw new Error("Expected function call response from OpenAI");
+      throw attachUsage(
+        new Error("Expected function call response from OpenAI"),
+        usage,
+        response.model
+      );
     }
 
     const rawResponse = toolCall.function.arguments;
@@ -273,11 +312,6 @@ export class OpenAIProvider implements ILLMProvider {
     const finishReason = normalizeFinishReason(
       response.choices[0]?.finish_reason
     );
-    const usage = {
-      promptTokens: response.usage?.prompt_tokens ?? 0,
-      completionTokens: response.usage?.completion_tokens ?? 0,
-      totalTokens: response.usage?.total_tokens ?? 0,
-    };
 
     /*
       Why the stop reason is read BEFORE parsing.
@@ -306,8 +340,12 @@ export class OpenAIProvider implements ILLMProvider {
     } catch (error) {
       // Not truncated, so genuinely malformed. Carry a head of the payload:
       // "Unable to parse JSON string" alone leaves nothing to diagnose from.
-      throw new Error(
-        `Model returned unparseable JSON (${error instanceof Error ? error.message : String(error)}). First 300 chars: ${rawResponse.slice(0, 300)}`
+      throw attachUsage(
+        new Error(
+          `Model returned unparseable JSON (${error instanceof Error ? error.message : String(error)}). First 300 chars: ${rawResponse.slice(0, 300)}`
+        ),
+        usage,
+        response.model
       );
     }
 
@@ -401,7 +439,7 @@ export class OpenAIProvider implements ILLMProvider {
   ): Promise<{
     content: unknown;
     rawResponse: string;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: LLMUsage;
     model: string;
     finishReason?: FinishReason;
   }> {
@@ -428,32 +466,41 @@ export class OpenAIProvider implements ILLMProvider {
       max_output_tokens: maxTokens,
     });
 
+    const usage = responsesUsage(response);
     const functionCall = response.output.find(
       (item): item is OpenAI.Responses.ResponseFunctionToolCall =>
         item.type === "function_call" && item.name === "structured_response"
     );
 
     if (!functionCall) {
-      throw new OpenAIProviderError(
-        "Expected structured_response function call from Responses API",
-        {
-          model,
-          responseId: response.id,
-          outputItems: response.output.map(item => ({
-            type: item.type,
-            ...("name" in item ? { name: item.name } : {}),
-          })),
-        }
+      throw attachUsage(
+        new OpenAIProviderError(
+          "Expected structured_response function call from Responses API",
+          {
+            model,
+            responseId: response.id,
+            outputItems: response.output.map(item => ({
+              type: item.type,
+              ...("name" in item ? { name: item.name } : {}),
+            })),
+          }
+        ),
+        usage,
+        response.model
       );
     }
 
+    let content: unknown;
+    try {
+      content = JSON.parse(functionCall.arguments);
+    } catch (error) {
+      throw attachUsage(error, usage, response.model);
+    }
+
     return {
-      content: JSON.parse(functionCall.arguments),
+      content,
       rawResponse: functionCall.arguments,
-      usage: {
-        inputTokens: response.usage?.input_tokens ?? 0,
-        outputTokens: response.usage?.output_tokens ?? 0,
-      },
+      usage,
       model: response.model,
       // The Responses API reports truncation as an incomplete status with a
       // reason, rather than a finish_reason on the choice.
@@ -473,7 +520,7 @@ export class OpenAIProvider implements ILLMProvider {
     temperature: number
   ): Promise<{
     summary: string;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: LLMUsage;
   }> {
     console.log(
       `[web-search] searchWeb() calling Responses API for query: "${query.substring(0, 100)}..."`
@@ -496,10 +543,7 @@ export class OpenAIProvider implements ILLMProvider {
 
     return {
       summary: response.output_text ?? "",
-      usage: {
-        inputTokens: response.usage?.input_tokens ?? 0,
-        outputTokens: response.usage?.output_tokens ?? 0,
-      },
+      usage: responsesUsage(response),
     };
   }
 
@@ -545,14 +589,44 @@ export class OpenAIProvider implements ILLMProvider {
    * 3. If search needed → web search → structure results.
    */
   private async generateWithSearch(request: LLMRequest): Promise<LLMResponse> {
+    /*
+      Up to three billed calls make one invocation. Each step's usage is added
+      to the total only once that step succeeds, so a failure part-way reports
+      the completed steps plus whatever the failing call attached -- counted
+      once -- instead of pricing the whole search as free.
+    */
+    let total: LLMUsage | undefined;
+    const record = (usage: LLMUsage): LLMUsage =>
+      (total = total ? addUsage(total, usage) : usage);
+    try {
+      return await this.runSearchSteps(request, record);
+    } catch (error) {
+      const failed = getFailedInvocationUsage(error);
+      const consumed = failed
+        ? total
+          ? addUsage(total, failed.usage)
+          : failed.usage
+        : total;
+      if (consumed) {
+        throw attachUsage(
+          error,
+          consumed,
+          failed?.model ?? request.model ?? this.defaultModel
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async runSearchSteps(
+    request: LLMRequest,
+    record: (usage: LLMUsage) => LLMUsage
+  ): Promise<LLMResponse> {
     console.log(`[web-search] generateWithSearch() entered`);
     const model = request.model ?? this.defaultModel;
     const startTime = Date.now();
     const userSchema = request.outputSchema as Record<string, unknown>;
     const temperature = request.temperature ?? 0;
-
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
 
     // --- Step 1: Try to answer (Responses API, forced function call) ------
     console.log(
@@ -592,8 +666,7 @@ export class OpenAIProvider implements ILLMProvider {
       request.maxTokens
     );
 
-    totalInputTokens += triageResult.usage.inputTokens;
-    totalOutputTokens += triageResult.usage.outputTokens;
+    const triageUsage = record(triageResult.usage);
 
     const triageData = triageResult.content as {
       web_search_needed?: boolean;
@@ -623,11 +696,7 @@ export class OpenAIProvider implements ILLMProvider {
       return {
         content: triageData.user_data,
         rawResponse,
-        usage: {
-          promptTokens: totalInputTokens,
-          completionTokens: totalOutputTokens,
-          totalTokens: totalInputTokens + totalOutputTokens,
-        },
+        usage: triageUsage,
         model: triageResult.model,
         provider: this.providerName,
         latencyMs: Date.now() - startTime,
@@ -643,8 +712,7 @@ export class OpenAIProvider implements ILLMProvider {
       temperature
     );
 
-    totalInputTokens += searchResult.usage.inputTokens;
-    totalOutputTokens += searchResult.usage.outputTokens;
+    record(searchResult.usage);
     console.log(
       `[web-search] Step 2 done: ${searchResult.summary.length} chars`
     );
@@ -675,8 +743,7 @@ export class OpenAIProvider implements ILLMProvider {
       request.maxTokens
     );
 
-    totalInputTokens += structureResult.usage.inputTokens;
-    totalOutputTokens += structureResult.usage.outputTokens;
+    const totalUsage = record(structureResult.usage);
 
     console.log(
       `[web-search] Step 3 done, total time: ${Date.now() - startTime}ms`
@@ -685,11 +752,7 @@ export class OpenAIProvider implements ILLMProvider {
     return {
       content: structureResult.content,
       rawResponse: structureResult.rawResponse,
-      usage: {
-        promptTokens: totalInputTokens,
-        completionTokens: totalOutputTokens,
-        totalTokens: totalInputTokens + totalOutputTokens,
-      },
+      usage: totalUsage,
       model: structureResult.model,
       provider: this.providerName,
       latencyMs: Date.now() - startTime,

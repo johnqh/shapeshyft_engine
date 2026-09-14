@@ -5,6 +5,7 @@ import type {
   ProviderConfig,
 } from "./types.js";
 import { normalizeFinishReason } from "./finish-reason.js";
+import { attachUsage } from "./usage-error.js";
 import { extractJson } from "./extract-json.js";
 
 /**
@@ -99,20 +100,31 @@ export class CustomLLMProvider implements ILLMProvider {
       ).finish_reason
     );
     const usage = this.extractUsage(result);
+    const model = request.model ?? "custom";
     if (finishReason === "length") {
-      throw new Error(
-        `Model output was truncated at the token limit (finish_reason=length) after ${usage.completionTokens} completion tokens with ${usage.promptTokens} in the prompt. The answer is incomplete; raise the ceiling, enlarge the context, or ask for less in one call.`
+      throw attachUsage(
+        new Error(
+          `Model output was truncated at the token limit (finish_reason=length) after ${usage.completionTokens} completion tokens with ${usage.promptTokens} in the prompt. The answer is incomplete; raise the ceiling, enlarge the context, or ask for less in one call.`
+        ),
+        usage,
+        model
       );
     }
 
     // Parse response - try multiple common formats
-    const { rawResponse, content } = this.parseResponse(result);
+    let parsed: { rawResponse: string; content: unknown };
+    try {
+      parsed = this.parseResponse(result);
+    } catch (error) {
+      throw attachUsage(error, usage, model);
+    }
+    const { rawResponse, content } = parsed;
 
     return {
       content,
       rawResponse,
       usage,
-      model: request.model ?? "custom",
+      model,
       provider: this.providerName,
       latencyMs,
       finishReason,

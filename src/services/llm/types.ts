@@ -87,16 +87,58 @@ export function requiresEntityId(
 }
 
 /**
+ * Token accounting for one invocation, which may span several provider calls.
+ *
+ * The first three fields are what every provider reports. The rest are the
+ * parts of the bill that plain token counts misprice; an adapter sets only
+ * what its provider reports, and `estimateUsageCost` treats an absent field as
+ * zero or as "billed at the plain rate".
+ */
+export interface LLMUsage {
+  promptTokens: number;
+  /** Everything billed at the output rate, including thinking tokens. */
+  completionTokens: number;
+  totalTokens: number;
+  /** Part of `promptTokens` served from the provider's prompt cache. */
+  cachedInputTokens?: number;
+  /** Part of `promptTokens` written to the prompt cache, where writes cost extra. */
+  cacheWriteInputTokens?: number;
+  /** Part of `promptTokens` that was audio, not cached, for providers billing audio by the token. */
+  audioInputTokens?: number;
+  /** Part of `completionTokens` spent reasoning. Informational; already priced as output. */
+  reasoningTokens?: number;
+  /** Reasoning tokens billed apart from `completionTokens` (Perplexity). */
+  separateReasoningTokens?: number;
+  /** Citation tokens billed apart from `completionTokens` (Perplexity). */
+  citationTokens?: number;
+  /** Web search calls or search queries the provider bills per call. */
+  searchCalls?: number;
+  /** Billable provider requests. Absent means one. */
+  requests?: number;
+  /** Largest prompt sent in any single request, for long-context tiers. Absent: `promptTokens`. */
+  maxPromptTokens?: number;
+  /**
+   * The complete cost in cents, when it is known without the catalog: billed
+   * by the provider itself (xAI, Perplexity) or priced by the adapter from a
+   * per-model and per-tool breakdown (Groq Compound). Replaces the token-based
+   * estimate entirely.
+   */
+  billedCostCents?: number;
+}
+
+/**
  * Response from an LLM provider
  */
 export interface LLMResponse {
   content: unknown;
   rawResponse: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
+  usage: LLMUsage;
+  /**
+   * Audio transcribed before generation (Groq Whisper). Priced against the
+   * transcription model, which is not `model` when an extraction model
+   * produced the structured output.
+   */
+  transcription?: { model: string; billedSeconds: number };
   model: string;
   provider: LlmProvider;
   latencyMs: number;

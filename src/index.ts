@@ -15,6 +15,8 @@ export { GeminiProvider } from "./services/llm/gemini.js";
 export { GroqProvider } from "./services/llm/groq.js";
 export { CustomLLMProvider } from "./services/llm/custom.js";
 export * from "./services/llm/finish-reason.js";
+export * from "./services/llm/usage-error.js";
+export * from "./lib/cost-estimation.js";
 export * from "./services/llm/extract-json.js";
 export * from "./config/providers.js";
 export * from "./lib/prompt-builder.js";

@@ -107,8 +107,7 @@ export type MistralModel =
   | "ministral-8b-2512"
   | "ministral-3b-2512"
   | "codestral-latest"
-  | "codestral-2508"
-  | "mistral-ocr-latest";
+  | "codestral-2508";
 
 /** Cohere model options (verified 2026-08-18) */
 export type CohereModel =
@@ -142,8 +141,9 @@ export type XaiModel =
   | "grok-4.20-multi-agent-0309"
   | "grok-build-0.1";
 
-/** DeepSeek model options (verified 2026-08-18) */
-export type DeepSeekModel = "deepseek-v4-pro" | "deepseek-v4-flash";
+/** DeepSeek model options (verified 2026-09-14) */
+export type DeepSeekModel =
+  "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash";
 
 /** Perplexity model options (verified 2026-08-18) */
 export type PerplexityModel =
@@ -268,7 +268,6 @@ export const PROVIDER_MODELS: Record<LlmProvider, readonly string[]> = {
     "ministral-3b-2512",
     "codestral-latest",
     "codestral-2508",
-    "mistral-ocr-latest",
   ] as const,
   cohere: [
     "command-a-plus-05-2026",
@@ -299,7 +298,7 @@ export const PROVIDER_MODELS: Record<LlmProvider, readonly string[]> = {
     "grok-4.20-multi-agent-0309",
     "grok-build-0.1",
   ] as const,
-  deepseek: ["deepseek-v4-pro", "deepseek-v4-flash"] as const,
+  deepseek: ["deepseek-flash", "deepseek-v4-pro", "deepseek-v4-flash"] as const,
   perplexity: [
     "sonar",
     "sonar-pro",
@@ -538,6 +537,53 @@ export interface ModelPricing {
   // Video costs (per minute in cents) - optional
   videoInput?: number; // Cost per minute of video input
   videoOutput?: number; // Cost per minute of video output
+
+  /*
+   * Everything below refines the token bill. Each field is optional and its
+   * absence means "no such charge" or "billed at the plain token rate", so a
+   * catalog entry only names what its provider actually does differently.
+   */
+
+  /** Cached input tokens, cents per 1M. Absent: billed at `input`. */
+  cachedInput?: number;
+  /** Input tokens written to the prompt cache (OpenAI GPT-5.6+), cents per 1M. Absent: `input`. */
+  cacheWriteInput?: number;
+  /** Audio input tokens for providers that bill audio by the token, cents per 1M. Absent: `input`. */
+  audioTokenInput?: number;
+  /** Reasoning tokens billed apart from `output` (Perplexity deep research), cents per 1M. */
+  reasoningTokens?: number;
+  /** Citation tokens billed apart from `output` (Perplexity deep research), cents per 1M. */
+  citationTokens?: number;
+  /** Flat fee per API request, in cents. */
+  requestFee?: number;
+  /** Fee per web search call or search query, in cents. */
+  searchCall?: number;
+  /**
+   * Higher rates once a single request's prompt reaches `minPromptTokens`.
+   * Providers apply the higher rate to every token of that request.
+   */
+  longContext?: {
+    minPromptTokens: number;
+    input: number;
+    output: number;
+    cachedInput?: number;
+  };
+  /**
+   * Announced rate changes. From `from` (an ISO date, UTC) the named rates
+   * replace the ones above; the latest change already in effect wins.
+   */
+  priceChanges?: {
+    from: string;
+    input?: number;
+    output?: number;
+    cachedInput?: number;
+  }[];
+  /** Token rates are multiplied by `multiplier` inside any of these UTC windows. */
+  peak?: {
+    multiplier: number;
+    /** `days` uses Date#getUTCDay (0 = Sunday); hours are [startHour, endHour). */
+    windowsUtc: { days: number[]; startHour: number; endHour: number }[];
+  };
 }
 
 /**
@@ -559,6 +605,11 @@ export interface MultimodalUsage {
 
 /**
  * Estimate cost in cents for token usage (text only)
+ *
+ * Returned at full precision. A structured-output call on a small model costs
+ * thousandths of a cent, so rounding here -- even to a hundredth of a cent --
+ * moves the answer by half or zeroes it. Round only for display.
+ *
  * @param pricing - Model pricing configuration
  * @param inputTokens - Number of input tokens
  * @param outputTokens - Number of output tokens
@@ -570,7 +621,7 @@ export function estimateCost(
 ): number {
   const inputCost = (inputTokens / 1_000_000) * pricing.input;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return Math.round((inputCost + outputCost) * 100) / 100; // Round to 2 decimal places
+  return inputCost + outputCost;
 }
 
 /**
@@ -616,7 +667,7 @@ export function estimateMultimodalCost(
     totalCost += usage.videoOutputMinutes * pricing.videoOutput;
   }
 
-  return Math.round(totalCost * 100) / 100; // Round to 2 decimal places
+  return totalCost; // Full precision, as for estimateCost
 }
 
 /**

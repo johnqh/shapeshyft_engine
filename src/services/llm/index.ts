@@ -17,6 +17,7 @@ export type {
   ILLMProvider,
   LLMRequest,
   LLMResponse,
+  LLMUsage,
   ProviderConfig,
 } from "./types.js";
 export { estimateCost, getModelPricing } from "./types.js";

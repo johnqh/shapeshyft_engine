@@ -12,15 +12,69 @@ import type {
   ILLMProvider,
   LLMRequest,
   LLMResponse,
+  LLMUsage,
   ProviderConfig,
 } from "./types.js";
 import { createLLMProvider } from "./index.js";
-import { getProviderForModel } from "../../config/providers.js";
+import {
+  findModelPricing,
+  getModelPricing,
+  getProviderForModel,
+} from "../../config/providers.js";
 import { isTranscriptionModel } from "../../lib/capability-validator.js";
 import { normalizeFinishReason } from "./finish-reason.js";
+import { compatibleUsage } from "./compatible-usage.js";
+import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
+import { estimateUsageCost } from "../../lib/cost-estimation.js";
 
 const DEFAULT_MODEL = "llama-3.3-70b-versatile";
 const DEFAULT_WHISPER_MODEL = "whisper-large-v3";
+
+/** Groq bills every transcription request as at least this long. */
+const WHISPER_MINIMUM_BILLED_SECONDS = 10;
+
+/**
+ * Compound tool fees, in cents per call. Advanced search is what the default
+ * Compound version runs. Code execution is billed by the hour, and the
+ * response reports no duration, so it cannot be priced and is left out.
+ * https://console.groq.com/docs/compound/systems/compound
+ */
+const COMPOUND_TOOL_CENTS: { match: RegExp; cents: number }[] = [
+  { match: /search/i, cents: 0.8 }, // $8 / 1000 requests
+  { match: /^visit/i, cents: 0.1 }, // $1 / 1000 requests
+];
+
+/**
+ * The cost of a Compound call, which is not a model but a system: it runs
+ * several models and tools, and reports each model's usage and each executed
+ * tool. Priced from that breakdown; undefined when the response carries none.
+ */
+export function compoundCostCents(
+  response: unknown,
+  systemModel: string,
+  at: Date = new Date()
+): number | undefined {
+  const r = response as {
+    usage_breakdown?: { models?: { model?: string; usage?: unknown }[] };
+    choices?: { message?: { executed_tools?: { type?: string }[] } }[];
+  };
+  const models = r.usage_breakdown?.models;
+  if (!Array.isArray(models) || models.length === 0) return undefined;
+
+  const systemPricing = getModelPricing(systemModel, { provider: "groq" });
+  let cents = 0;
+  for (const entry of models) {
+    const pricing =
+      findModelPricing(entry.model ?? "", { provider: "groq" }) ??
+      systemPricing;
+    cents += estimateUsageCost(pricing, compatibleUsage(entry.usage), at);
+  }
+  for (const tool of r.choices?.[0]?.message?.executed_tools ?? []) {
+    const fee = COMPOUND_TOOL_CENTS.find(t => t.match.test(tool.type ?? ""));
+    if (fee) cents += fee.cents;
+  }
+  return cents;
+}
 
 /**
  * Convert base64 audio data to an Uploadable for the Groq SDK.
@@ -122,14 +176,25 @@ export class GroqProvider implements ILLMProvider {
       );
     }
 
-    // Transcribe using Groq Whisper
-    const transcription = await this.client.audio.transcriptions.create({
+    // Transcribe using Groq Whisper. verbose_json is what reports the audio
+    // duration, and Whisper is billed by duration, not tokens.
+    const whisperModel = model || DEFAULT_WHISPER_MODEL;
+    const transcription = (await this.client.audio.transcriptions.create({
       file: audioFile,
-      model: model || DEFAULT_WHISPER_MODEL,
-    });
+      model: whisperModel,
+      response_format: "verbose_json",
+    })) as { text: string; duration?: number | string };
 
     const transcriptionText = transcription.text;
     const transcriptionLatency = Date.now() - startTime;
+    const durationSeconds = Number(transcription.duration);
+    const transcriptionBilling = {
+      model: whisperModel,
+      billedSeconds: Math.max(
+        WHISPER_MINIMUM_BILLED_SECONDS,
+        Number.isFinite(durationSeconds) ? durationSeconds : 0
+      ),
+    };
 
     // If no extraction model configured, return raw transcription
     if (!request.extractionModel) {
@@ -141,7 +206,8 @@ export class GroqProvider implements ILLMProvider {
           completionTokens: 0,
           totalTokens: 0,
         },
-        model: model || DEFAULT_WHISPER_MODEL,
+        transcription: transcriptionBilling,
+        model: whisperModel,
         provider: this.providerName,
         latencyMs: transcriptionLatency,
         // Whisper transcribes to completion; there is no token ceiling to hit.
@@ -172,12 +238,28 @@ export class GroqProvider implements ILLMProvider {
       maxTokens: request.maxTokens,
     };
 
-    const extractionResponse =
-      await extractionProvider.generate(extractionRequest);
+    let extractionResponse: LLMResponse;
+    try {
+      extractionResponse = await extractionProvider.generate(extractionRequest);
+    } catch (error) {
+      // The transcription was billed even though extraction failed.
+      const failed = getFailedInvocationUsage(error);
+      throw attachUsage(
+        error,
+        failed?.usage ?? {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+        },
+        failed?.model ?? request.extractionModel,
+        transcriptionBilling
+      );
+    }
 
     // Combine latency from both steps
     return {
       ...extractionResponse,
+      transcription: transcriptionBilling,
       // Override latency to include both transcription and extraction
       latencyMs: Date.now() - startTime,
       // Include raw transcription in response for debugging
@@ -234,23 +316,32 @@ export class GroqProvider implements ILLMProvider {
 
     const latencyMs = Date.now() - startTime;
 
+    const usage: LLMUsage = compatibleUsage(response.usage);
+    const compoundCents = compoundCostCents(response, model);
+    if (compoundCents !== undefined) usage.billedCostCents = compoundCents;
+
     // Extract structured response from function call
     const toolCall = response.choices[0]?.message.tool_calls?.[0];
     if (!toolCall || toolCall.function.name !== "structured_response") {
-      throw new Error("Expected function call response from Groq");
+      throw attachUsage(
+        new Error("Expected function call response from Groq"),
+        usage,
+        response.model
+      );
     }
 
     const rawResponse = toolCall.function.arguments;
-    const content = JSON.parse(rawResponse);
+    let content: unknown;
+    try {
+      content = JSON.parse(rawResponse);
+    } catch (error) {
+      throw attachUsage(error, usage, response.model);
+    }
 
     return {
       content,
       rawResponse,
-      usage: {
-        promptTokens: response.usage?.prompt_tokens ?? 0,
-        completionTokens: response.usage?.completion_tokens ?? 0,
-        totalTokens: response.usage?.total_tokens ?? 0,
-      },
+      usage,
       model: response.model,
       provider: this.providerName,
       latencyMs,

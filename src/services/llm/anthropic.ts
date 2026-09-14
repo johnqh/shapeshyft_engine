@@ -13,6 +13,7 @@ import type {
   ProviderConfig,
 } from "./types.js";
 import { normalizeFinishReason } from "./finish-reason.js";
+import { attachUsage } from "./usage-error.js";
 
 // Fallback when an endpoint doesn't pin a model. claude-sonnet-4-20250514 is
 // deprecated (retires 2026-06-15); use a current, non-deprecated Sonnet-tier id.
@@ -96,13 +97,24 @@ export class AnthropicProvider implements ILLMProvider {
 
     const latencyMs = Date.now() - startTime;
 
+    // The adapter sends no cache_control, so input_tokens is the whole prompt.
+    const usage = {
+      promptTokens: response.usage.input_tokens,
+      completionTokens: response.usage.output_tokens,
+      totalTokens: response.usage.input_tokens + response.usage.output_tokens,
+    };
+
     // Extract structured response from tool use
     const toolUseBlock = response.content.find(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
     );
 
     if (!toolUseBlock || toolUseBlock.name !== "structured_response") {
-      throw new Error("Expected tool_use response from Anthropic");
+      throw attachUsage(
+        new Error("Expected tool_use response from Anthropic"),
+        usage,
+        response.model
+      );
     }
 
     const content = toolUseBlock.input;
@@ -111,11 +123,7 @@ export class AnthropicProvider implements ILLMProvider {
     return {
       content,
       rawResponse,
-      usage: {
-        promptTokens: response.usage.input_tokens,
-        completionTokens: response.usage.output_tokens,
-        totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-      },
+      usage,
       model: response.model,
       provider: this.providerName,
       latencyMs,

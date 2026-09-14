@@ -793,11 +793,11 @@ describe("shapeshyft_types", () => {
       expect(cost).toBe(105000);
     });
 
-    it("should round to 2 decimal places", () => {
-      // Create a scenario that produces many decimal places
+    it("keeps sub-cent precision instead of rounding it away", () => {
+      // (1/1M)*300 + (1/1M)*1500 = 0.0018 cents. Rounding to hundredths of a
+      // cent zeroed this, and moved typical small-model calls by up to half.
       const cost = estimateCost(pricing, 1, 1);
-      // (1/1M)*300 + (1/1M)*1500 = 0.0003 + 0.0015 = 0.0018 -> rounds to 0
-      expect(cost).toBe(0);
+      expect(cost).toBeCloseTo(0.0018, 10);
     });
 
     it("should handle pricing with zero cost", () => {
@@ -893,11 +893,11 @@ describe("shapeshyft_types", () => {
       expect(estimateMultimodalCost(fullPricing, usage)).toBe(0);
     });
 
-    it("should round to 2 decimal places", () => {
+    it("keeps sub-cent precision instead of rounding it away", () => {
       const usage: MultimodalUsage = { inputTokens: 333 };
       const cost = estimateMultimodalCost(fullPricing, usage);
-      // (333/1M)*300 = 0.0999 -> rounds to 0.1
-      expect(cost).toBe(0.1);
+      // (333/1M)*300 = 0.0999 cents
+      expect(cost).toBeCloseTo(0.0999, 10);
     });
   });
 
