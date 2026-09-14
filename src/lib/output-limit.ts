@@ -9,8 +9,7 @@
 
 /** Result of resolving a ceiling: a usable value, or a caller-facing error. */
 export type ResolvedMaxOutputTokens =
-  | { ok: true; value: number | null }
-  | { ok: false; error: string };
+  { ok: true; value: number | null } | { ok: false; error: string };
 
 /**
  * Resolve the output ceiling for one invocation.

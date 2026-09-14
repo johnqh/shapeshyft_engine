@@ -17,7 +17,13 @@ import { tokenLimitParamFor } from "../../src/services/llm/openai.js";
  */
 describe("tokenLimitParamFor", () => {
   it("uses the newer name for OpenAI's reasoning-era families", () => {
-    for (const model of ["gpt-5.4", "gpt-5.6-terra", "gpt-5", "o1", "o3-mini"]) {
+    for (const model of [
+      "gpt-5.4",
+      "gpt-5.6-terra",
+      "gpt-5",
+      "o1",
+      "o3-mini",
+    ]) {
       expect(tokenLimitParamFor(true, model)).toBe("max_completion_tokens");
     }
   });
@@ -52,10 +58,10 @@ describe("tokenLimitParamFor", () => {
    */
   it("covers a family member that does not exist yet", () => {
     expect(tokenLimitParamFor(true, "gpt-5.9-ultra")).toBe(
-      "max_completion_tokens",
+      "max_completion_tokens"
     );
     expect(tokenLimitParamFor(true, "o7-preview")).toBe(
-      "max_completion_tokens",
+      "max_completion_tokens"
     );
   });
 

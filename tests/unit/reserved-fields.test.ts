@@ -47,9 +47,11 @@ describe("extractReservedFields", () => {
     });
 
     it("still strips a rejected context from the input", () => {
-      expect(extractReservedFields({ a: 1, context: 42 }).cleanedInput).toEqual({
-        a: 1,
-      });
+      expect(extractReservedFields({ a: 1, context: 42 }).cleanedInput).toEqual(
+        {
+          a: 1,
+        }
+      );
     });
   });
 
@@ -59,7 +61,9 @@ describe("extractReservedFields", () => {
     });
 
     it("is false only for an explicit false", () => {
-      expect(extractReservedFields({ web_search: false }).webSearch).toBe(false);
+      expect(extractReservedFields({ web_search: false }).webSearch).toBe(
+        false
+      );
     });
 
     it("is true for any other present value", () => {
@@ -79,8 +83,12 @@ describe("extractReservedFields", () => {
 
   describe("max_output_tokens", () => {
     it("passes the raw value through for validation elsewhere", () => {
-      expect(extractReservedFields({ max_output_tokens: 2000 }).maxOutputTokens).toBe(2000);
-      expect(extractReservedFields({ max_output_tokens: "bad" }).maxOutputTokens).toBe("bad");
+      expect(
+        extractReservedFields({ max_output_tokens: 2000 }).maxOutputTokens
+      ).toBe(2000);
+      expect(
+        extractReservedFields({ max_output_tokens: "bad" }).maxOutputTokens
+      ).toBe("bad");
     });
 
     it("is undefined when absent", () => {
@@ -94,12 +102,15 @@ describe("extractReservedFields", () => {
       ["an array", [1, 2, 3]],
       ["null", null],
       ["a number", 7],
-    ])("passes %s through unchanged with no reserved fields", (_label, input) => {
-      const result = extractReservedFields(input);
-      expect(result.cleanedInput).toEqual(input);
-      expect(result.context).toBeUndefined();
-      expect(result.webSearch).toBeUndefined();
-      expect(result.maxOutputTokens).toBeUndefined();
-    });
+    ])(
+      "passes %s through unchanged with no reserved fields",
+      (_label, input) => {
+        const result = extractReservedFields(input);
+        expect(result.cleanedInput).toEqual(input);
+        expect(result.context).toBeUndefined();
+        expect(result.webSearch).toBeUndefined();
+        expect(result.maxOutputTokens).toBeUndefined();
+      }
+    );
   });
 });

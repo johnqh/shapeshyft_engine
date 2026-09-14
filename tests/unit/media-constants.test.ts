@@ -66,9 +66,7 @@ describe("Media Constants", () => {
     });
 
     it("should equal allowed for audio (no convertible)", () => {
-      expect(ACCEPTED_MIME_TYPES.audio).toEqual([
-        ...ALLOWED_MIME_TYPES.audio,
-      ]);
+      expect(ACCEPTED_MIME_TYPES.audio).toEqual([...ALLOWED_MIME_TYPES.audio]);
     });
   });
 
@@ -121,15 +119,21 @@ describe("Media Constants", () => {
 
   describe("PROVIDER_URL_REGEX", () => {
     it("should match gs:// URLs", () => {
-      expect(PROVIDER_URL_REGEX.test("gs://my-bucket/path/to/file.png")).toBe(true);
+      expect(PROVIDER_URL_REGEX.test("gs://my-bucket/path/to/file.png")).toBe(
+        true
+      );
     });
 
     it("should not match http URLs", () => {
-      expect(PROVIDER_URL_REGEX.test("http://example.com/file.png")).toBe(false);
+      expect(PROVIDER_URL_REGEX.test("http://example.com/file.png")).toBe(
+        false
+      );
     });
 
     it("should not match https URLs", () => {
-      expect(PROVIDER_URL_REGEX.test("https://example.com/file.png")).toBe(false);
+      expect(PROVIDER_URL_REGEX.test("https://example.com/file.png")).toBe(
+        false
+      );
     });
 
     it("should not match s3:// URLs", () => {
@@ -210,7 +214,9 @@ describe("Media Constants", () => {
     });
 
     it("should handle query parameters in URLs", () => {
-      expect(inferMimeFromUrl("gs://bucket/file.png?version=1")).toBe("image/png");
+      expect(inferMimeFromUrl("gs://bucket/file.png?version=1")).toBe(
+        "image/png"
+      );
     });
 
     it("should return undefined for unknown extensions", () => {
@@ -257,8 +263,12 @@ describe("Media Constants", () => {
     });
 
     it("should throw for unsupported formats", () => {
-      expect(() => getOpenAIAudioFormat("audio/ogg")).toThrow("does not support");
-      expect(() => getOpenAIAudioFormat("audio/flac")).toThrow("does not support");
+      expect(() => getOpenAIAudioFormat("audio/ogg")).toThrow(
+        "does not support"
+      );
+      expect(() => getOpenAIAudioFormat("audio/flac")).toThrow(
+        "does not support"
+      );
     });
   });
 });

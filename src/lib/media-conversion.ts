@@ -5,7 +5,10 @@
 
 import sharp from "sharp";
 import type { MediaContent } from "../types/index.js";
-import { ALLOWED_MIME_TYPES, CONVERTIBLE_MIME_TYPES } from "./media-constants.js";
+import {
+  ALLOWED_MIME_TYPES,
+  CONVERTIBLE_MIME_TYPES,
+} from "./media-constants.js";
 
 /**
  * Check if a MIME type needs conversion

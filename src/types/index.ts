@@ -14,32 +14,32 @@ export type {
   PaginatedResponse,
   PaginationInfo,
   PaginationOptions,
-} from '@sudobility/types';
+} from "@sudobility/types";
 
-import type { Optional, BaseResponse } from '@sudobility/types';
+import type { Optional, BaseResponse } from "@sudobility/types";
 
 // =============================================================================
 // Enum Types
 // =============================================================================
 
 export type LlmProvider =
-  | 'openai'
-  | 'anthropic'
-  | 'gemini'
-  | 'mistral'
-  | 'cohere'
-  | 'groq'
-  | 'xai'
-  | 'deepseek'
-  | 'perplexity'
-  | 'lm_studio';
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "mistral"
+  | "cohere"
+  | "groq"
+  | "xai"
+  | "deepseek"
+  | "perplexity"
+  | "lm_studio";
 
-export type HttpMethod = 'GET' | 'POST';
+export type HttpMethod = "GET" | "POST";
 
 /**
  * Media type for multimodal content
  */
-export type MediaType = 'image' | 'audio' | 'video';
+export type MediaType = "image" | "audio" | "video";
 
 // =============================================================================
 // LLM Provider Models
@@ -47,131 +47,131 @@ export type MediaType = 'image' | 'audio' | 'video';
 
 /** OpenAI model options (verified 2026-08-18) */
 export type OpenAiModel =
-  | 'gpt-5.6-sol'
-  | 'gpt-5.6-terra'
-  | 'gpt-5.6-luna'
-  | 'gpt-5.5'
-  | 'gpt-5.4'
-  | 'gpt-5.4-mini'
-  | 'gpt-5.4-nano'
-  | 'gpt-5'
-  | 'gpt-5-mini'
-  | 'gpt-5-nano'
-  | 'gpt-4.1'
-  | 'gpt-4.1-mini'
-  | 'gpt-4.1-nano'
-  | 'gpt-4o'
-  | 'gpt-4o-mini';
+  | "gpt-5.6-sol"
+  | "gpt-5.6-terra"
+  | "gpt-5.6-luna"
+  | "gpt-5.5"
+  | "gpt-5.4"
+  | "gpt-5.4-mini"
+  | "gpt-5.4-nano"
+  | "gpt-5"
+  | "gpt-5-mini"
+  | "gpt-5-nano"
+  | "gpt-4.1"
+  | "gpt-4.1-mini"
+  | "gpt-4.1-nano"
+  | "gpt-4o"
+  | "gpt-4o-mini";
 
 /** Anthropic model options (verified 2026-08-18) */
 export type AnthropicModel =
-  | 'claude-fable-5'
-  | 'claude-opus-5'
-  | 'claude-sonnet-5'
-  | 'claude-haiku-4-5'
-  | 'claude-opus-4-8'
-  | 'claude-opus-4-7'
-  | 'claude-opus-4-6'
-  | 'claude-sonnet-4-6'
-  | 'claude-opus-4-5-20251101'
-  | 'claude-sonnet-4-5-20250929';
+  | "claude-fable-5"
+  | "claude-opus-5"
+  | "claude-sonnet-5"
+  | "claude-haiku-4-5"
+  | "claude-opus-4-8"
+  | "claude-opus-4-7"
+  | "claude-opus-4-6"
+  | "claude-sonnet-4-6"
+  | "claude-opus-4-5-20251101"
+  | "claude-sonnet-4-5-20250929";
 
 /** Google Gemini model options (verified 2026-08-18) */
 export type GeminiModel =
-  | 'gemini-3.7-flash'
-  | 'gemini-3.6-flash'
-  | 'gemini-3.5-flash'
-  | 'gemini-3.5-flash-lite'
-  | 'gemini-3.1-flash-lite'
-  | 'gemini-3.1-pro-preview'
-  | 'gemini-3-flash-preview'
-  | 'gemini-3.1-flash-image'
-  | 'gemini-3.1-flash-lite-image'
-  | 'gemini-3-pro-image'
-  | 'gemini-2.5-pro'
-  | 'gemini-2.5-flash'
-  | 'gemini-2.5-flash-lite'
-  | 'gemini-2.5-flash-image'
-  | 'gemini-2.5-flash-native-audio-preview-12-2025'
-  | 'veo-3.1-generate-preview'
-  | 'veo-3.1-lite-generate-preview';
+  | "gemini-3.7-flash"
+  | "gemini-3.6-flash"
+  | "gemini-3.5-flash"
+  | "gemini-3.5-flash-lite"
+  | "gemini-3.1-flash-lite"
+  | "gemini-3.1-pro-preview"
+  | "gemini-3-flash-preview"
+  | "gemini-3.1-flash-image"
+  | "gemini-3.1-flash-lite-image"
+  | "gemini-3-pro-image"
+  | "gemini-2.5-pro"
+  | "gemini-2.5-flash"
+  | "gemini-2.5-flash-lite"
+  | "gemini-2.5-flash-image"
+  | "gemini-2.5-flash-native-audio-preview-12-2025"
+  | "veo-3.1-generate-preview"
+  | "veo-3.1-lite-generate-preview";
 
 /** Mistral AI model options (verified 2026-08-18) */
 export type MistralModel =
-  | 'mistral-large-latest'
-  | 'mistral-large-2512'
-  | 'mistral-medium-latest'
-  | 'mistral-small-latest'
-  | 'mistral-small-2603'
-  | 'ministral-14b-2512'
-  | 'ministral-8b-2512'
-  | 'ministral-3b-2512'
-  | 'codestral-latest'
-  | 'codestral-2508'
-  | 'mistral-ocr-latest';
+  | "mistral-large-latest"
+  | "mistral-large-2512"
+  | "mistral-medium-latest"
+  | "mistral-small-latest"
+  | "mistral-small-2603"
+  | "ministral-14b-2512"
+  | "ministral-8b-2512"
+  | "ministral-3b-2512"
+  | "codestral-latest"
+  | "codestral-2508"
+  | "mistral-ocr-latest";
 
 /** Cohere model options (verified 2026-08-18) */
 export type CohereModel =
-  | 'command-a-plus-05-2026'
-  | 'command-a-03-2025'
-  | 'command-a-reasoning-08-2025'
-  | 'command-a-vision-07-2025'
-  | 'command-a-translate-08-2025'
-  | 'command-r7b-12-2024'
-  | 'command-r-plus-08-2024'
-  | 'command-r-08-2024';
+  | "command-a-plus-05-2026"
+  | "command-a-03-2025"
+  | "command-a-reasoning-08-2025"
+  | "command-a-vision-07-2025"
+  | "command-a-translate-08-2025"
+  | "command-r7b-12-2024"
+  | "command-r-plus-08-2024"
+  | "command-r-08-2024";
 
 /** Groq model options (verified 2026-08-18) */
 export type GroqModel =
-  | 'openai/gpt-oss-120b'
-  | 'openai/gpt-oss-20b'
-  | 'qwen/qwen3.6-27b'
-  | 'minimaxai/minimax-m2.7'
-  | 'groq/compound'
-  | 'groq/compound-mini'
-  | 'whisper-large-v3'
-  | 'whisper-large-v3-turbo';
+  | "openai/gpt-oss-120b"
+  | "openai/gpt-oss-20b"
+  | "qwen/qwen3.6-27b"
+  | "minimaxai/minimax-m2.7"
+  | "groq/compound"
+  | "groq/compound-mini"
+  | "whisper-large-v3"
+  | "whisper-large-v3-turbo";
 
 /** xAI (Grok) model options (verified 2026-08-18) */
 export type XaiModel =
-  | 'grok-4.6'
-  | 'grok-4.5'
-  | 'grok-4.3'
-  | 'grok-4.20-0309-reasoning'
-  | 'grok-4.20-0309-non-reasoning'
-  | 'grok-4.20-multi-agent-0309'
-  | 'grok-build-0.1';
+  | "grok-4.6"
+  | "grok-4.5"
+  | "grok-4.3"
+  | "grok-4.20-0309-reasoning"
+  | "grok-4.20-0309-non-reasoning"
+  | "grok-4.20-multi-agent-0309"
+  | "grok-build-0.1";
 
 /** DeepSeek model options (verified 2026-08-18) */
-export type DeepSeekModel = 'deepseek-v4-pro' | 'deepseek-v4-flash';
+export type DeepSeekModel = "deepseek-v4-pro" | "deepseek-v4-flash";
 
 /** Perplexity model options (verified 2026-08-18) */
 export type PerplexityModel =
-  | 'sonar'
-  | 'sonar-pro'
-  | 'sonar-pro-search'
-  | 'sonar-reasoning-pro'
-  | 'sonar-deep-research';
+  | "sonar"
+  | "sonar-pro"
+  | "sonar-pro-search"
+  | "sonar-reasoning-pro"
+  | "sonar-deep-research";
 
 /** Custom LLM server models (suggested options; any string is valid) */
 export type LlmServerModel =
-  | 'qwen3-8b'
-  | 'qwen3-14b'
-  | 'qwen3-30b-a3b'
-  | 'qwen2.5-coder-14b-instruct'
-  | 'mistral-7b-instruct-v0.3'
-  | 'deepseek-r1-distill-qwen-7b'
-  | 'gemma-3-4b-it'
-  | 'gemma-3-12b-it'
-  | 'gemma-3-27b-it'
-  | 'qwen2.5-vl-3b-instruct'
-  | 'qwen2.5-vl-7b-instruct'
-  | 'qwen2.5-vl-32b-instruct'
-  | 'qwen2.5-vl-72b-instruct'
-  | 'glm-4v-9b'
-  | 'pixtral-12b-2409'
-  | 'olmocr-2-7b-1025'
-  | 'janus-pro-7b'
+  | "qwen3-8b"
+  | "qwen3-14b"
+  | "qwen3-30b-a3b"
+  | "qwen2.5-coder-14b-instruct"
+  | "mistral-7b-instruct-v0.3"
+  | "deepseek-r1-distill-qwen-7b"
+  | "gemma-3-4b-it"
+  | "gemma-3-12b-it"
+  | "gemma-3-27b-it"
+  | "qwen2.5-vl-3b-instruct"
+  | "qwen2.5-vl-7b-instruct"
+  | "qwen2.5-vl-32b-instruct"
+  | "qwen2.5-vl-72b-instruct"
+  | "glm-4v-9b"
+  | "pixtral-12b-2409"
+  | "olmocr-2-7b-1025"
+  | "janus-pro-7b"
   | string;
 
 /** Union of all model types */
@@ -189,16 +189,16 @@ export type LlmModel =
 
 /** List of available providers */
 export const LLM_PROVIDERS: LlmProvider[] = [
-  'openai',
-  'anthropic',
-  'gemini',
-  'mistral',
-  'cohere',
-  'groq',
-  'xai',
-  'deepseek',
-  'perplexity',
-  'lm_studio',
+  "openai",
+  "anthropic",
+  "gemini",
+  "mistral",
+  "cohere",
+  "groq",
+  "xai",
+  "deepseek",
+  "perplexity",
+  "lm_studio",
 ];
 
 /**
@@ -210,102 +210,102 @@ export const LLM_PROVIDERS: LlmProvider[] = [
  */
 export const PROVIDER_MODELS: Record<LlmProvider, readonly string[]> = {
   openai: [
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-    'gpt-5.5',
-    'gpt-5.4',
-    'gpt-5.4-mini',
-    'gpt-5.4-nano',
-    'gpt-5',
-    'gpt-5-mini',
-    'gpt-5-nano',
-    'gpt-4.1',
-    'gpt-4.1-mini',
-    'gpt-4.1-nano',
-    'gpt-4o',
-    'gpt-4o-mini',
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
   ] as const,
   anthropic: [
-    'claude-fable-5',
-    'claude-opus-5',
-    'claude-sonnet-5',
-    'claude-haiku-4-5',
-    'claude-opus-4-8',
-    'claude-opus-4-7',
-    'claude-opus-4-6',
-    'claude-sonnet-4-6',
-    'claude-opus-4-5-20251101',
-    'claude-sonnet-4-5-20250929',
+    "claude-fable-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-opus-4-5-20251101",
+    "claude-sonnet-4-5-20250929",
   ] as const,
   gemini: [
-    'gemini-3.7-flash',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite',
-    'gemini-3.1-pro-preview',
-    'gemini-3-flash-preview',
-    'gemini-3.1-flash-image',
-    'gemini-3.1-flash-lite-image',
-    'gemini-3-pro-image',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash-image',
-    'gemini-2.5-flash-native-audio-preview-12-2025',
-    'veo-3.1-generate-preview',
-    'veo-3.1-lite-generate-preview',
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image",
+    "gemini-3-pro-image",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash-image",
+    "gemini-2.5-flash-native-audio-preview-12-2025",
+    "veo-3.1-generate-preview",
+    "veo-3.1-lite-generate-preview",
   ] as const,
   mistral: [
-    'mistral-large-latest',
-    'mistral-large-2512',
-    'mistral-medium-latest',
-    'mistral-small-latest',
-    'mistral-small-2603',
-    'ministral-14b-2512',
-    'ministral-8b-2512',
-    'ministral-3b-2512',
-    'codestral-latest',
-    'codestral-2508',
-    'mistral-ocr-latest',
+    "mistral-large-latest",
+    "mistral-large-2512",
+    "mistral-medium-latest",
+    "mistral-small-latest",
+    "mistral-small-2603",
+    "ministral-14b-2512",
+    "ministral-8b-2512",
+    "ministral-3b-2512",
+    "codestral-latest",
+    "codestral-2508",
+    "mistral-ocr-latest",
   ] as const,
   cohere: [
-    'command-a-plus-05-2026',
-    'command-a-03-2025',
-    'command-a-reasoning-08-2025',
-    'command-a-vision-07-2025',
-    'command-a-translate-08-2025',
-    'command-r7b-12-2024',
-    'command-r-plus-08-2024',
-    'command-r-08-2024',
+    "command-a-plus-05-2026",
+    "command-a-03-2025",
+    "command-a-reasoning-08-2025",
+    "command-a-vision-07-2025",
+    "command-a-translate-08-2025",
+    "command-r7b-12-2024",
+    "command-r-plus-08-2024",
+    "command-r-08-2024",
   ] as const,
   groq: [
-    'openai/gpt-oss-120b',
-    'openai/gpt-oss-20b',
-    'qwen/qwen3.6-27b',
-    'minimaxai/minimax-m2.7',
-    'groq/compound',
-    'groq/compound-mini',
-    'whisper-large-v3',
-    'whisper-large-v3-turbo',
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.6-27b",
+    "minimaxai/minimax-m2.7",
+    "groq/compound",
+    "groq/compound-mini",
+    "whisper-large-v3",
+    "whisper-large-v3-turbo",
   ] as const,
   xai: [
-    'grok-4.6',
-    'grok-4.5',
-    'grok-4.3',
-    'grok-4.20-0309-reasoning',
-    'grok-4.20-0309-non-reasoning',
-    'grok-4.20-multi-agent-0309',
-    'grok-build-0.1',
+    "grok-4.6",
+    "grok-4.5",
+    "grok-4.3",
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-0309-non-reasoning",
+    "grok-4.20-multi-agent-0309",
+    "grok-build-0.1",
   ] as const,
-  deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'] as const,
+  deepseek: ["deepseek-v4-pro", "deepseek-v4-flash"] as const,
   perplexity: [
-    'sonar',
-    'sonar-pro',
-    'sonar-pro-search',
-    'sonar-reasoning-pro',
-    'sonar-deep-research',
+    "sonar",
+    "sonar-pro",
+    "sonar-pro-search",
+    "sonar-reasoning-pro",
+    "sonar-deep-research",
   ] as const,
   lm_studio: [] as const, // any model name is valid on a custom server
 } as const;
@@ -325,7 +325,7 @@ export function isValidModelForProvider(
 ): boolean {
   const models = PROVIDER_MODELS[provider];
   // lm_studio accepts any model string
-  if (provider === 'lm_studio') return true;
+  if (provider === "lm_studio") return true;
   return models.includes(model);
 }
 
@@ -341,7 +341,7 @@ export function isValidModelForProvider(
  * - s3: AWS S3 URIs (s3://bucket/key)
  * - file: Direct file upload (multipart form data)
  */
-export type MediaInputFormat = 'url' | 'base64' | 'gcs' | 's3' | 'file';
+export type MediaInputFormat = "url" | "base64" | "gcs" | "s3" | "file";
 
 /**
  * Media format support configuration for a model.
@@ -392,7 +392,7 @@ export interface MediaContent {
   /** Type of media */
   type: MediaType;
   /** Format of the data */
-  format: 'base64' | 'url';
+  format: "base64" | "url";
   /** MIME type (e.g., "image/png", "audio/mp3", "video/mp4") */
   mimeType: string;
   /** Base64 data (without prefix) or URL */
@@ -435,10 +435,10 @@ export interface RequiredCapabilities {
  */
 function detectMediaType(
   contentMediaType: string
-): 'image' | 'audio' | 'video' | null {
-  if (contentMediaType.startsWith('image/')) return 'image';
-  if (contentMediaType.startsWith('audio/')) return 'audio';
-  if (contentMediaType.startsWith('video/')) return 'video';
+): "image" | "audio" | "video" | null {
+  if (contentMediaType.startsWith("image/")) return "image";
+  if (contentMediaType.startsWith("audio/")) return "audio";
+  if (contentMediaType.startsWith("video/")) return "video";
   return null;
 }
 
@@ -448,13 +448,13 @@ function detectMediaType(
  */
 function scanSchemaForMediaTypes(
   schema: Record<string, unknown>,
-  result: Set<'image' | 'audio' | 'video'>
+  result: Set<"image" | "audio" | "video">
 ): void {
-  if (!schema || typeof schema !== 'object') return;
+  if (!schema || typeof schema !== "object") return;
 
   // Check if this property has contentMediaType
-  const contentMediaType = schema['contentMediaType'];
-  if (typeof contentMediaType === 'string') {
+  const contentMediaType = schema["contentMediaType"];
+  if (typeof contentMediaType === "string") {
     const mediaType = detectMediaType(contentMediaType);
     if (mediaType) {
       result.add(mediaType);
@@ -462,18 +462,18 @@ function scanSchemaForMediaTypes(
   }
 
   // Recurse into properties
-  const properties = schema['properties'];
-  if (properties && typeof properties === 'object') {
+  const properties = schema["properties"];
+  if (properties && typeof properties === "object") {
     for (const prop of Object.values(properties as Record<string, unknown>)) {
-      if (prop && typeof prop === 'object') {
+      if (prop && typeof prop === "object") {
         scanSchemaForMediaTypes(prop as Record<string, unknown>, result);
       }
     }
   }
 
   // Recurse into array items
-  const items = schema['items'];
-  if (items && typeof items === 'object') {
+  const items = schema["items"];
+  if (items && typeof items === "object") {
     scanSchemaForMediaTypes(items as Record<string, unknown>, result);
   }
 }
@@ -490,20 +490,20 @@ export function detectRequiredCapabilities(
 
   // Scan input schema for required input capabilities
   if (inputSchema) {
-    const inputMediaTypes = new Set<'image' | 'audio' | 'video'>();
+    const inputMediaTypes = new Set<"image" | "audio" | "video">();
     scanSchemaForMediaTypes(inputSchema, inputMediaTypes);
-    if (inputMediaTypes.has('image')) result.visionInput = true;
-    if (inputMediaTypes.has('audio')) result.audioInput = true;
-    if (inputMediaTypes.has('video')) result.videoInput = true;
+    if (inputMediaTypes.has("image")) result.visionInput = true;
+    if (inputMediaTypes.has("audio")) result.audioInput = true;
+    if (inputMediaTypes.has("video")) result.videoInput = true;
   }
 
   // Scan output schema for required output capabilities
   if (outputSchema) {
-    const outputMediaTypes = new Set<'image' | 'audio' | 'video'>();
+    const outputMediaTypes = new Set<"image" | "audio" | "video">();
     scanSchemaForMediaTypes(outputSchema, outputMediaTypes);
-    if (outputMediaTypes.has('image')) result.imageOutput = true;
-    if (outputMediaTypes.has('audio')) result.audioOutput = true;
-    if (outputMediaTypes.has('video')) result.videoOutput = true;
+    if (outputMediaTypes.has("image")) result.imageOutput = true;
+    if (outputMediaTypes.has("audio")) result.audioOutput = true;
+    if (outputMediaTypes.has("video")) result.videoOutput = true;
   }
 
   return result;
@@ -762,7 +762,7 @@ export interface EndpointBase {
   /** Declares which media types this endpoint is expected to generate (images, audio, video). Null means text-only output. */
   expects_media_output: MediaOutputConfig | null;
   /** Format for returning generated media: "base64" embeds data inline, "url" stores in cloud and returns a signed URL. Null means no media output. */
-  output_media_format: 'base64' | 'url' | null;
+  output_media_format: "base64" | "url" | null;
   /** For audio/transcription endpoints (e.g., Whisper): the model used to extract structured data from the raw transcription text. Null means no post-processing. */
   transcription_extraction_model: string | null;
   /** Whether this endpoint uses web search for supported providers (OpenAI Responses API). */
@@ -831,7 +831,7 @@ export interface UsageAnalytics {
 // Entity Storage Config Types
 // =============================================================================
 
-export type StorageProvider = 'gcs' | 's3';
+export type StorageProvider = "gcs" | "s3";
 
 /**
  * Storage configuration for an entity (safe version without credentials).
@@ -851,7 +851,7 @@ export interface EntityStorageConfig {
  * GCS service account credentials
  */
 export interface GCSCredentials {
-  type: 'service_account';
+  type: "service_account";
   project_id: string;
   private_key_id: string;
   private_key: string;
@@ -971,7 +971,7 @@ export interface CurrentUser {
   /** Whether the caller is a site admin */
   siteAdmin: boolean;
   /** Which credential authenticated this request */
-  auth_method: 'firebase' | 'api_key';
+  auth_method: "firebase" | "api_key";
   /** Display name from the Firebase profile, or null */
   display_name: string | null;
 }
@@ -1032,7 +1032,7 @@ export interface EndpointCreateRequestBase {
   instructions: Optional<string>;
   context: Optional<string>;
   expects_media_output?: Optional<MediaOutputConfig>;
-  output_media_format?: Optional<'base64' | 'url'>;
+  output_media_format?: Optional<"base64" | "url">;
   transcription_extraction_model?: Optional<string>;
   web_search?: Optional<boolean>;
   /** Sampling temperature (0-2). Omit or pass null to leave it to the provider. */
@@ -1057,7 +1057,7 @@ export interface EndpointUpdateRequestBase {
   is_active?: Optional<boolean>;
   ip_allowlist?: Optional<string[]>;
   expects_media_output?: Optional<MediaOutputConfig>;
-  output_media_format?: Optional<'base64' | 'url'>;
+  output_media_format?: Optional<"base64" | "url">;
   transcription_extraction_model?: Optional<string>;
   web_search?: Optional<boolean>;
   /** Sampling temperature (0-2). `null` clears it, leaving sampling to the provider. */
@@ -1078,7 +1078,7 @@ export interface EndpointUpdateRequestBase {
  * URL query params are always strings, so boolean values are represented
  * as the literal strings `'true'` or `'false'`, or `undefined` when absent.
  */
-export type BooleanQueryParam = 'true' | 'false' | undefined;
+export type BooleanQueryParam = "true" | "false" | undefined;
 
 export interface ProjectQueryParams {
   is_active: BooleanQueryParam;
@@ -1163,15 +1163,15 @@ export interface LlmResponse {
  */
 export const FINISH_REASONS = [
   /** The model finished on its own. */
-  'stop',
+  "stop",
   /** The output ceiling was reached; the answer is truncated and likely invalid. */
-  'length',
+  "length",
   /** The provider's safety system stopped generation. */
-  'content_filter',
+  "content_filter",
   /** The model stopped to call a tool. */
-  'tool_calls',
+  "tool_calls",
   /** The provider reported a reason ShapeShyft does not recognize. */
-  'other',
+  "other",
 ] as const;
 
 /** Why the model stopped generating. See {@link FINISH_REASONS}. */

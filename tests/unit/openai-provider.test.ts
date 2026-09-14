@@ -4,11 +4,13 @@ import { OpenAIProvider } from "../../src/services/llm/openai.js";
 describe("OpenAIProvider", () => {
   it("returns truncated tool-call arguments with usage instead of parsing them", async () => {
     const provider = new OpenAIProvider({ apiKey: "test" });
-    (provider as unknown as {
-      client: {
-        chat: { completions: { create: () => Promise<unknown> } };
-      };
-    }).client = {
+    (
+      provider as unknown as {
+        client: {
+          chat: { completions: { create: () => Promise<unknown> } };
+        };
+      }
+    ).client = {
       chat: {
         completions: {
           create: async () => ({
@@ -26,7 +28,7 @@ describe("OpenAIProvider", () => {
                     {
                       function: {
                         name: "structured_response",
-                        arguments: "{\"items\":[",
+                        arguments: '{"items":[',
                       },
                     },
                   ],
@@ -46,7 +48,7 @@ describe("OpenAIProvider", () => {
     });
 
     expect(response.finishReason).toBe("length");
-    expect(response.content).toBe("{\"items\":[");
+    expect(response.content).toBe('{"items":[');
     expect(response.usage).toEqual({
       promptTokens: 12,
       completionTokens: 99,

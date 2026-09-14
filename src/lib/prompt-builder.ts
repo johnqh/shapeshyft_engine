@@ -131,8 +131,7 @@ export function generateSchemaExample(schema: JsonSchema): unknown {
     typeof schema.additionalProperties === "object"
   ) {
     const keyDesc = (schema as Record<string, unknown>)["x-key-description"] as
-      | string
-      | undefined;
+      string | undefined;
     const sampleKey = keyDesc
       ? `<${keyDesc.split(/[\s(,]/)[0].toLowerCase()}>`
       : "<key>";

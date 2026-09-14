@@ -58,10 +58,7 @@ export class AnthropicProvider implements ILLMProvider {
               source: {
                 type: "base64",
                 media_type: m.mimeType as
-                  | "image/jpeg"
-                  | "image/png"
-                  | "image/gif"
-                  | "image/webp",
+                  "image/jpeg" | "image/png" | "image/gif" | "image/webp",
                 data: m.data,
               },
             });
@@ -142,10 +139,7 @@ export class AnthropicProvider implements ILLMProvider {
               source: {
                 type: "base64",
                 media_type: m.mimeType as
-                  | "image/jpeg"
-                  | "image/png"
-                  | "image/gif"
-                  | "image/webp",
+                  "image/jpeg" | "image/png" | "image/gif" | "image/webp",
                 data: m.data,
               },
             });

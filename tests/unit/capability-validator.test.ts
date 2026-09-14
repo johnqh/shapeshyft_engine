@@ -148,7 +148,9 @@ describe("Capability Validator", () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toEqual(
-        expect.arrayContaining([expect.stringContaining("only supported for Gemini")])
+        expect.arrayContaining([
+          expect.stringContaining("only supported for Gemini"),
+        ])
       );
     });
 
@@ -189,7 +191,9 @@ describe("Capability Validator", () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors).toEqual(
-        expect.arrayContaining([expect.stringContaining("does not support audio format")])
+        expect.arrayContaining([
+          expect.stringContaining("does not support audio format"),
+        ])
       );
     });
   });
