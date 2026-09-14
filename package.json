@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/shapeshyft_engine",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Stateless LLM structured-output engine shared by ShapeShyft and ShapeRouter",
   "type": "module",
   "main": "./dist/index.js",

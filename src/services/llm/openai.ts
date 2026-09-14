@@ -2,8 +2,10 @@
  * @fileoverview OpenAI LLM provider
  * @description Implements the ILLMProvider interface for OpenAI models.
  * Also used by Mistral, xAI, DeepSeek, Perplexity, and Cohere
- * (OpenAI-compatible APIs). Supports function calling for structured output,
- * multimodal input (images, audio), and audio output generation.
+ * (OpenAI-compatible APIs). Structured output is a forced function call,
+ * except for Cohere, whose compatibility API has no `tool_choice` and uses
+ * `response_format` instead. Supports multimodal input (images, audio) and
+ * audio output generation.
  */
 
 import OpenAI from "openai";
@@ -30,6 +32,7 @@ import {
 import { normalizeFinishReason } from "./finish-reason.js";
 import { addUsage, compatibleUsage } from "./compatible-usage.js";
 import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
+import { cohereResponseFormat } from "./cohere-schema.js";
 
 /** Usage from a Responses API response, which names its fields differently. */
 function responsesUsage(response: OpenAI.Responses.Response): LLMUsage {
@@ -62,6 +65,16 @@ function responsesUsage(response: OpenAI.Responses.Response): LLMUsage {
 }
 
 const DEFAULT_MODEL = "gpt-4o-mini";
+
+/**
+ * How a provider is made to return the endpoint's schema.
+ *
+ * - `tool_call`: a `structured_response` function with a forced `tool_choice`.
+ * - `response_format`: Cohere's `{ type: "json_object", schema }`, read from
+ *   the message content. Cohere's compatibility API does not accept
+ *   `tool_choice`, so a tool call there could not be forced.
+ */
+export type StructuredOutputMode = "tool_call" | "response_format";
 
 class OpenAIProviderError extends Error {
   details?: Record<string, unknown>;
@@ -124,6 +137,33 @@ export class OpenAIProvider implements ILLMProvider {
   /** Whether this client talks to OpenAI itself, or an OpenAI-compatible third party. */
   private isOpenAi: boolean;
 
+  private structuredOutput: StructuredOutputMode;
+
+  /** Request fields that ask for structured output, in this provider's dialect. */
+  private structuredOutputParams(
+    outputSchema: LLMRequest["outputSchema"]
+  ): Record<string, unknown> {
+    if (this.structuredOutput === "response_format") {
+      return { response_format: cohereResponseFormat(outputSchema) };
+    }
+    return {
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "structured_response",
+            description: "Generate structured response matching the schema",
+            parameters: outputSchema as Record<string, unknown>,
+          },
+        },
+      ],
+      tool_choice: {
+        type: "function",
+        function: { name: "structured_response" },
+      },
+    };
+  }
+
   constructor(
     config: ProviderConfig,
     /**
@@ -152,10 +192,13 @@ export class OpenAIProvider implements ILLMProvider {
        * only know `max_tokens`.
        */
       isOpenAi?: boolean;
+      /** How to request structured output. Default: `tool_call`. */
+      structuredOutput?: StructuredOutputMode;
     } = {}
   ) {
     this.disableThinking = options.disableThinking ?? false;
     this.isOpenAi = options.isOpenAi ?? false;
+    this.structuredOutput = options.structuredOutput ?? "tool_call";
     if (!config.apiKey) {
       throw new Error("OpenAI API key is required");
     }
@@ -221,18 +264,6 @@ export class OpenAIProvider implements ILLMProvider {
     }
     messages.push({ role: "user", content: userContent });
 
-    // Use function calling for structured output
-    const tools: OpenAI.Chat.ChatCompletionTool[] = [
-      {
-        type: "function",
-        function: {
-          name: "structured_response",
-          description: "Generate structured response matching the schema",
-          parameters: request.outputSchema as Record<string, unknown>,
-        },
-      },
-    ];
-
     // Audio output configuration - ONLY enable when endpoint expects audio output
     const modalities: ("text" | "audio")[] = ["text"];
     let audioConfig: { voice: string; format: string } | undefined;
@@ -250,13 +281,9 @@ export class OpenAIProvider implements ILLMProvider {
       model,
       messages,
       ...(audioConfig ? { modalities, audio: audioConfig } : {}),
-      tools,
-      tool_choice: {
-        type: "function",
-        function: { name: "structured_response" },
-      },
+      ...this.structuredOutputParams(request.outputSchema),
       // Off where the model reasons by default: thinking mode rejects
-      // `tool_choice` outright, so this is what keeps the line above legal.
+      // `tool_choice` outright, so this is what keeps the forced call legal.
       ...(this.disableThinking ? { thinking: { type: "disabled" } } : {}),
       temperature: request.temperature ?? 0,
       [tokenLimitParamFor(this.isOpenAi, model)]: request.maxTokens,
@@ -297,17 +324,30 @@ export class OpenAIProvider implements ILLMProvider {
 
     const usage = compatibleUsage(response.usage);
 
-    // Extract structured response from function call
-    const toolCall = response.choices[0]?.message.tool_calls?.[0];
-    if (!toolCall || toolCall.function.name !== "structured_response") {
-      throw attachUsage(
-        new Error("Expected function call response from OpenAI"),
-        usage,
-        response.model
-      );
+    // Extract the structured response: the forced function call's arguments,
+    // or the message content in response_format mode.
+    let rawResponse: string;
+    if (this.structuredOutput === "response_format") {
+      const text = response.choices[0]?.message.content;
+      if (typeof text !== "string" || text.length === 0) {
+        throw attachUsage(
+          new Error("Expected JSON message content from the provider"),
+          usage,
+          response.model
+        );
+      }
+      rawResponse = text;
+    } else {
+      const toolCall = response.choices[0]?.message.tool_calls?.[0];
+      if (!toolCall || toolCall.function.name !== "structured_response") {
+        throw attachUsage(
+          new Error("Expected function call response from OpenAI"),
+          usage,
+          response.model
+        );
+      }
+      rawResponse = toolCall.function.arguments;
     }
-
-    const rawResponse = toolCall.function.arguments;
 
     const finishReason = normalizeFinishReason(
       response.choices[0]?.finish_reason
@@ -818,20 +858,7 @@ export class OpenAIProvider implements ILLMProvider {
       model,
       messages,
       ...(audioConfig ? { modalities, audio: audioConfig } : {}),
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "structured_response",
-            description: "Generate structured response matching the schema",
-            parameters: request.outputSchema,
-          },
-        },
-      ],
-      tool_choice: {
-        type: "function",
-        function: { name: "structured_response" },
-      },
+      ...this.structuredOutputParams(request.outputSchema),
       temperature: request.temperature ?? 0,
       [tokenLimitParamFor(this.isOpenAi, model)]: request.maxTokens,
     };

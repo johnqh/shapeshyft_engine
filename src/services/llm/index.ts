@@ -2,7 +2,7 @@
  * @fileoverview LLM provider factory and exports
  * @description Creates the appropriate LLM provider instance based on provider type.
  * OpenAI-compatible providers (Mistral, xAI, DeepSeek, Perplexity, Cohere) reuse
- * the OpenAIProvider class. Groq has a dedicated provider for Whisper transcription.
+ * the OpenAIProvider class, each with its own base URL. Groq has a dedicated provider for Whisper transcription.
  */
 
 import type { LlmProvider } from "../../types/index.js";
@@ -68,11 +68,21 @@ export function createLLMProvider(
         },
         { disableThinking: true }
       );
-    // NOTE: Cohere's API is NOT OpenAI-compatible (different request/response
-    // shape); routing it through OpenAIProvider will not work regardless of base
-    // URL. It needs a dedicated provider — left as-is to avoid changing behavior.
+    /*
+      Cohere's native Chat API has its own request and response shape, but its
+      Compatibility API speaks OpenAI's -- except that it takes no
+      `tool_choice`, so structured output goes through `response_format`.
+      https://docs.cohere.com/docs/compatibility-api
+    */
     case "cohere":
-      return new OpenAIProvider(config);
+      return new OpenAIProvider(
+        {
+          ...config,
+          endpointUrl:
+            config.endpointUrl ?? OPENAI_COMPATIBLE_BASE_URLS[providerType],
+        },
+        { structuredOutput: "response_format" }
+      );
     case "lm_studio":
       return new CustomLLMProvider(config);
     default:
@@ -90,6 +100,7 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LlmProvider, string>> = {
   xai: "https://api.x.ai/v1",
   deepseek: "https://api.deepseek.com/v1",
   perplexity: "https://api.perplexity.ai",
+  cohere: "https://api.cohere.ai/compatibility/v1",
 };
 
 /**
@@ -101,7 +112,7 @@ export const PROVIDER_ENDPOINTS: Record<LlmProvider, string> = {
   gemini:
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
   mistral: "https://api.mistral.ai/v1/chat/completions",
-  cohere: "https://api.cohere.ai/v1/chat",
+  cohere: "https://api.cohere.ai/compatibility/v1/chat/completions",
   groq: "https://api.groq.com/openai/v1/chat/completions",
   xai: "https://api.x.ai/v1/chat/completions",
   deepseek: "https://api.deepseek.com/v1/chat/completions",
