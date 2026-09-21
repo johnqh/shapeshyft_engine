@@ -10,15 +10,63 @@ import type {
   ILLMProvider,
   LLMRequest,
   LLMResponse,
+  LLMUsage,
   ProviderConfig,
 } from "./types.js";
 import { normalizeFinishReason } from "./finish-reason.js";
 import { attachUsage } from "./usage-error.js";
 
+/**
+ * The system prompt as one cacheable block.
+ *
+ * Anthropic caches nothing unless asked. A breakpoint on the system block
+ * caches everything before it, which is the tools and the system prompt -- the
+ * part of a request that stays identical from one call to the next while the
+ * user message changes. A cache write bills at 1.25x the input rate and a read
+ * at 0.1x, so the first call to repeat within the five-minute window already
+ * comes out ahead; a prompt below the model's minimum (1024 tokens for most,
+ * 4096 for Opus 4.5+ and Haiku 4.5) is simply not cached and costs nothing
+ * extra.
+ *
+ * An empty prompt yields no block at all: Anthropic rejects an empty text
+ * block, and `cache_control` on one is worse.
+ */
+function systemBlocks(
+  systemPrompt: string | undefined
+): Anthropic.TextBlockParam[] | undefined {
+  if (!systemPrompt) return undefined;
+  return [
+    {
+      type: "text",
+      text: systemPrompt,
+      cache_control: { type: "ephemeral" },
+    },
+  ];
+}
+
 // Fallback when an endpoint doesn't pin a model. claude-sonnet-4-20250514 is
 // deprecated (retires 2026-06-15); use a current, non-deprecated Sonnet-tier id.
 // (Bump to "claude-sonnet-5" or "claude-opus-4-8" for the latest tier.)
 const DEFAULT_MODEL = "claude-sonnet-4-6";
+
+/**
+ * Anthropic reports `input_tokens` as only the tokens neither read from nor
+ * written to the cache, so the whole prompt is the three added together. The
+ * cached and written parts stay named, as `LLMUsage` defines them: parts of
+ * `promptTokens`, priced apart.
+ */
+export function anthropicUsage(usage: Anthropic.Usage): LLMUsage {
+  const read = usage.cache_read_input_tokens ?? 0;
+  const written = usage.cache_creation_input_tokens ?? 0;
+  const promptTokens = usage.input_tokens + read + written;
+  return {
+    promptTokens,
+    completionTokens: usage.output_tokens,
+    totalTokens: promptTokens + usage.output_tokens,
+    ...(read > 0 ? { cachedInputTokens: read } : {}),
+    ...(written > 0 ? { cacheWriteInputTokens: written } : {}),
+  };
+}
 
 export class AnthropicProvider implements ILLMProvider {
   readonly providerName = "anthropic" as const;
@@ -83,7 +131,9 @@ export class AnthropicProvider implements ILLMProvider {
     const response = await this.client.messages.create({
       model,
       max_tokens: request.maxTokens ?? 4096,
-      system: request.systemPrompt,
+      ...(systemBlocks(request.systemPrompt)
+        ? { system: systemBlocks(request.systemPrompt) }
+        : {}),
       messages: [{ role: "user", content: userContent }],
       tools,
       tool_choice: { type: "tool", name: "structured_response" },
@@ -97,12 +147,7 @@ export class AnthropicProvider implements ILLMProvider {
 
     const latencyMs = Date.now() - startTime;
 
-    // The adapter sends no cache_control, so input_tokens is the whole prompt.
-    const usage = {
-      promptTokens: response.usage.input_tokens,
-      completionTokens: response.usage.output_tokens,
-      totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-    };
+    const usage = anthropicUsage(response.usage);
 
     // Extract structured response from tool use
     const toolUseBlock = response.content.find(
@@ -170,7 +215,9 @@ export class AnthropicProvider implements ILLMProvider {
     return {
       model,
       max_tokens: request.maxTokens ?? 4096,
-      system: request.systemPrompt,
+      ...(systemBlocks(request.systemPrompt)
+        ? { system: systemBlocks(request.systemPrompt) }
+        : {}),
       messages: [{ role: "user", content: userContent }],
       tools: [
         {

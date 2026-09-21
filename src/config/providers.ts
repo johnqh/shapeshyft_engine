@@ -1397,17 +1397,68 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 
   // Anthropic — https://platform.claude.com/docs/en/about-claude/pricing
   // 4.6 and later: full 1M context at standard rates, no long-context surcharge.
-  // No cachedInput: the adapter sends no cache_control, so nothing is cached.
-  "claude-fable-5": { input: 1000, output: 5000 },
-  "claude-opus-5": { input: 500, output: 2500 },
-  "claude-sonnet-5": { input: 200, output: 1000 },
-  "claude-haiku-4-5": { input: 100, output: 500 },
-  "claude-opus-4-8": { input: 500, output: 2500 },
-  "claude-opus-4-7": { input: 500, output: 2500 },
-  "claude-opus-4-6": { input: 500, output: 2500 },
-  "claude-sonnet-4-6": { input: 300, output: 1500 },
-  "claude-opus-4-5-20251101": { input: 500, output: 2500 },
-  "claude-sonnet-4-5-20250929": { input: 300, output: 1500 }, // Retires 2026-09-29
+  // The adapter caches the system prompt (5-minute ephemeral). A read bills at
+  // 0.1x input and a write at 1.25x, so each row below is derived from `input`.
+  "claude-fable-5": {
+    input: 1000,
+    output: 5000,
+    cachedInput: 100,
+    cacheWriteInput: 1250,
+  },
+  "claude-opus-5": {
+    input: 500,
+    output: 2500,
+    cachedInput: 50,
+    cacheWriteInput: 625,
+  },
+  "claude-sonnet-5": {
+    input: 200,
+    output: 1000,
+    cachedInput: 20,
+    cacheWriteInput: 250,
+  },
+  "claude-haiku-4-5": {
+    input: 100,
+    output: 500,
+    cachedInput: 10,
+    cacheWriteInput: 125,
+  },
+  "claude-opus-4-8": {
+    input: 500,
+    output: 2500,
+    cachedInput: 50,
+    cacheWriteInput: 625,
+  },
+  "claude-opus-4-7": {
+    input: 500,
+    output: 2500,
+    cachedInput: 50,
+    cacheWriteInput: 625,
+  },
+  "claude-opus-4-6": {
+    input: 500,
+    output: 2500,
+    cachedInput: 50,
+    cacheWriteInput: 625,
+  },
+  "claude-sonnet-4-6": {
+    input: 300,
+    output: 1500,
+    cachedInput: 30,
+    cacheWriteInput: 375,
+  },
+  "claude-opus-4-5-20251101": {
+    input: 500,
+    output: 2500,
+    cachedInput: 50,
+    cacheWriteInput: 625,
+  },
+  "claude-sonnet-4-5-20250929": {
+    input: 300,
+    output: 1500,
+    cachedInput: 30,
+    cacheWriteInput: 375,
+  }, // Retires 2026-09-29
 
   // Google Gemini — https://ai.google.dev/gemini-api/docs/pricing
   // Images, video and (unless audioTokenInput says otherwise) audio are billed

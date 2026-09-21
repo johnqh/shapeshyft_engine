@@ -546,7 +546,7 @@ export interface ModelPricing {
 
   /** Cached input tokens, cents per 1M. Absent: billed at `input`. */
   cachedInput?: number;
-  /** Input tokens written to the prompt cache (OpenAI GPT-5.6+), cents per 1M. Absent: `input`. */
+  /** Input tokens written to the prompt cache (OpenAI GPT-5.6+, Anthropic), cents per 1M. Absent: `input`. */
   cacheWriteInput?: number;
   /** Audio input tokens for providers that bill audio by the token, cents per 1M. Absent: `input`. */
   audioTokenInput?: number;
@@ -1258,6 +1258,13 @@ export interface AiExecutionResponse {
   usage: {
     tokens_input: number;
     tokens_output: number;
+    /**
+     * The part of `tokens_input` the provider served from its prompt cache,
+     * billed at the cached rate. Absent when nothing was cached or the
+     * provider reports no such figure -- which is not the same as "cache
+     * disabled": DeepSeek and OpenAI cache automatically and report it.
+     */
+    tokens_cached_input?: number;
     latency_ms: number;
     estimated_cost_cents: number;
     /**
