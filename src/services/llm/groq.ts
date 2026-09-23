@@ -25,6 +25,7 @@ import { isTranscriptionModel } from "../../lib/capability-validator.js";
 import { normalizeFinishReason } from "./finish-reason.js";
 import { compatibleUsage } from "./compatible-usage.js";
 import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
+import { readModelJson } from "./json-repair.js";
 import { estimateUsageCost } from "../../lib/cost-estimation.js";
 
 const DEFAULT_MODEL = "llama-3.3-70b-versatile";
@@ -333,7 +334,7 @@ export class GroqProvider implements ILLMProvider {
     const rawResponse = toolCall.function.arguments;
     let content: unknown;
     try {
-      content = JSON.parse(rawResponse);
+      content = readModelJson(rawResponse, this.providerName);
     } catch (error) {
       throw attachUsage(error, usage, response.model);
     }

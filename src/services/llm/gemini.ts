@@ -21,6 +21,7 @@ import type {
 import { isGenerativeModel } from "../../lib/capability-validator.js";
 import { normalizeFinishReason } from "./finish-reason.js";
 import { attachUsage } from "./usage-error.js";
+import { readModelJson } from "./json-repair.js";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
@@ -169,7 +170,7 @@ export class GeminiProvider implements ILLMProvider {
 
     let content: unknown;
     try {
-      content = JSON.parse(rawResponse);
+      content = readModelJson(rawResponse, this.providerName);
     } catch (error) {
       throw attachUsage(error, usage, modelName);
     }

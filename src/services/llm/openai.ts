@@ -33,6 +33,7 @@ import { normalizeFinishReason } from "./finish-reason.js";
 import { addUsage, compatibleUsage } from "./compatible-usage.js";
 import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
 import { cohereResponseFormat } from "./cohere-schema.js";
+import { readModelJson } from "./json-repair.js";
 
 /** Usage from a Responses API response, which names its fields differently. */
 function responsesUsage(response: OpenAI.Responses.Response): LLMUsage {
@@ -376,9 +377,9 @@ export class OpenAIProvider implements ILLMProvider {
 
     let content: unknown;
     try {
-      content = JSON.parse(rawResponse);
+      content = readModelJson(rawResponse, `${this.providerName}/${model}`);
     } catch (error) {
-      // Not truncated, so genuinely malformed. Carry a head of the payload:
+      // Not truncated, and not repairable either: genuinely malformed. Carry a head of the payload:
       // "Unable to parse JSON string" alone leaves nothing to diagnose from.
       throw attachUsage(
         new Error(
@@ -532,7 +533,7 @@ export class OpenAIProvider implements ILLMProvider {
 
     let content: unknown;
     try {
-      content = JSON.parse(functionCall.arguments);
+      content = readModelJson(functionCall.arguments, this.providerName);
     } catch (error) {
       throw attachUsage(error, usage, response.model);
     }
