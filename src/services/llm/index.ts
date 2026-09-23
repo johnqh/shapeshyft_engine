@@ -12,6 +12,7 @@ import { AnthropicProvider } from "./anthropic.js";
 import { GeminiProvider } from "./gemini.js";
 import { GroqProvider } from "./groq.js";
 import { CustomLLMProvider } from "./custom.js";
+import { JevProvider } from "./jev.js";
 
 export type {
   ILLMProvider,
@@ -85,6 +86,8 @@ export function createLLMProvider(
       );
     case "lm_studio":
       return new CustomLLMProvider(config);
+    case "jev":
+      return new JevProvider(config);
     default:
       throw new Error(`Unknown provider type: ${providerType}`);
   }
@@ -118,4 +121,5 @@ export const PROVIDER_ENDPOINTS: Record<LlmProvider, string> = {
   deepseek: "https://api.deepseek.com/v1/chat/completions",
   perplexity: "https://api.perplexity.ai/chat/completions",
   lm_studio: "{custom_endpoint}",
+  jev: "https://api.typesafe.ai/v1/systemone",
 };

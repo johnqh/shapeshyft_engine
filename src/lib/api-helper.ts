@@ -49,6 +49,8 @@ function getProviderNotes(provider: LlmProvider): string {
       return "Note: This prompt is optimized for Google Gemini models";
     case "lm_studio":
       return "Note: This prompt is designed for custom LLM servers";
+    case "jev":
+      return "Note: Jev does not take a pasteable chat prompt -- it answers typed Choice/Score/Noul questions built from the output schema. Use buildApiPayload() for its actual request shape.";
     default:
       return "";
   }

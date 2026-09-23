@@ -14,6 +14,12 @@ export { AnthropicProvider } from "./services/llm/anthropic.js";
 export { GeminiProvider } from "./services/llm/gemini.js";
 export { GroqProvider } from "./services/llm/groq.js";
 export { CustomLLMProvider } from "./services/llm/custom.js";
+export {
+  JevProvider,
+  checkJevCompatibility,
+  classifyJevField,
+  type JevCompatibility,
+} from "./services/llm/jev.js";
 export * from "./services/llm/finish-reason.js";
 export * from "./services/llm/usage-error.js";
 export * from "./lib/cost-estimation.js";

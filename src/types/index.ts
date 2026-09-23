@@ -32,7 +32,8 @@ export type LlmProvider =
   | "xai"
   | "deepseek"
   | "perplexity"
-  | "lm_studio";
+  | "lm_studio"
+  | "jev";
 
 export type HttpMethod = "GET" | "POST";
 
@@ -153,6 +154,18 @@ export type PerplexityModel =
   | "sonar-reasoning-pro"
   | "sonar-deep-research";
 
+/**
+ * Jev (TypeSafe AI) model options (verified 2026-09-20).
+ *
+ * Jev is not a text-generation model: it is a "System One" model that answers
+ * pre-declared Choice/Score/Noul questions with calibrated probabilities
+ * instead of writing free-form text. `jev-latest` and `jev-preview` are
+ * aliases that currently point to `jev-1.13.0` and move when a new release
+ * ships; pin `jev-1.13.0` for answers that must not shift under you.
+ * @see https://docs.typesafe.ai/models
+ */
+export type JevModel = "jev-latest" | "jev-preview" | "jev-1.13.0";
+
 /** Custom LLM server models (suggested options; any string is valid) */
 export type LlmServerModel =
   | "qwen3-8b"
@@ -185,6 +198,7 @@ export type LlmModel =
   | XaiModel
   | DeepSeekModel
   | PerplexityModel
+  | JevModel
   | LlmServerModel;
 
 /** List of available providers */
@@ -199,6 +213,7 @@ export const LLM_PROVIDERS: LlmProvider[] = [
   "deepseek",
   "perplexity",
   "lm_studio",
+  "jev",
 ];
 
 /**
@@ -307,6 +322,7 @@ export const PROVIDER_MODELS: Record<LlmProvider, readonly string[]> = {
     "sonar-deep-research",
   ] as const,
   lm_studio: [] as const, // any model name is valid on a custom server
+  jev: ["jev-latest", "jev-preview", "jev-1.13.0"] as const,
 } as const;
 
 /**

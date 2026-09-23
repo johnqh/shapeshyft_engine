@@ -19,6 +19,9 @@
  * - **deepseek**: DeepSeek V4.1 Flash and V4 Pro
  * - **perplexity**: Sonar models with live web search grounding
  * - **lm_studio**: Local LLM server (LM Studio or any OpenAI-compatible endpoint)
+ * - **jev**: TypeSafe AI's Jev, a "System One" model. Text-only, no free-form
+ *   generation -- see the Jev section below before assuming it behaves like
+ *   the providers above.
  *
  * ## Keeping this current
  *
@@ -75,6 +78,30 @@
  *
  * @see https://lmstudio.ai/docs/developer/openai-compat
  * @see https://lmstudio.ai/docs/developer/openai-compat/models
+ *
+ * ## Jev (TypeSafe AI)
+ *
+ * Jev does not generate free-form text or arbitrary JSON: it answers
+ * pre-declared Choice (pick one of up to 255 options), Score (a 2-10 level
+ * ordered rubric), or Noul (yes/no probability) questions, evaluated in
+ * parallel. `services/llm/jev.ts` maps an endpoint's `outputSchema` onto these
+ * primitives one top-level property at a time:
+ *
+ * - `{ type: "boolean" }` -> Noul
+ * - `{ type: "string", enum: [...] }` -> Choice (enum values become options)
+ * - `{ type: "string", enum: [...], "x-jev-kind": "score" }` -> Score (the
+ *   enum, in order, becomes the rubric's levels from low to high)
+ *
+ * Any other field shape (free text, numbers, arrays, nested objects) is
+ * incompatible with Jev and fails with a validation error naming the field --
+ * there is no fallback that stringifies or guesses at unsupported types.
+ * Confirmed against https://docs.typesafe.ai on 2026-09-23; verify against the
+ * same docs before trusting model IDs or pricing here after that date, since
+ * TypeSafe shipped this model days before that verification and jev-1.13 was
+ * still described as having "rough edges".
+ *
+ * @see https://docs.typesafe.ai/api.md
+ * @see https://docs.typesafe.ai/primitives.md
  */
 
 import type {
@@ -171,6 +198,15 @@ export const PROVIDERS: ProviderConfig[] = [
     allowsCustomModel: true,
     defaultModel: "qwen3-8b",
     requiresEndpointUrl: true,
+  },
+  {
+    id: "jev",
+    name: "Jev (TypeSafe AI)",
+    description:
+      "Structured decisions (Choice/Score/Noul), not free-form text -- only endpoints whose fields are booleans or enums are compatible",
+    allowsCustomModel: false,
+    defaultModel: "jev-latest",
+    requiresEndpointUrl: false,
   },
 ];
 
@@ -338,6 +374,9 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
     "olmocr-2-7b-1025", // olmOCR 2 - specialized for OCR (Oct 2025)
     "janus-pro-7b", // DeepSeek Janus-Pro - visual QA, scene interpretation
   ],
+  // Jev (TypeSafe AI) -- https://docs.typesafe.ai/models
+  // Aliases move when a new release ships; jev-1.13.0 pins the current one.
+  jev: ["jev-latest", "jev-preview", "jev-1.13.0"],
 };
 
 // =============================================================================
@@ -1309,6 +1348,33 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     videoOutput: false,
     mediaFormats: { imageFormats: ["base64"] },
   },
+
+  // Jev (TypeSafe AI) -- text-only, no media in or out, ever.
+  // https://docs.typesafe.ai/concepts/state.md
+  "jev-latest": {
+    visionInput: false,
+    audioInput: false,
+    videoInput: false,
+    imageOutput: false,
+    audioOutput: false,
+    videoOutput: false,
+  },
+  "jev-preview": {
+    visionInput: false,
+    audioInput: false,
+    videoInput: false,
+    imageOutput: false,
+    audioOutput: false,
+    videoOutput: false,
+  },
+  "jev-1.13.0": {
+    visionInput: false,
+    audioInput: false,
+    videoInput: false,
+    imageOutput: false,
+    audioOutput: false,
+    videoOutput: false,
+  },
 };
 
 // =============================================================================
@@ -1719,6 +1785,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "pixtral-12b-2409": { input: 0, output: 0 },
   "olmocr-2-7b-1025": { input: 0, output: 0 },
   "janus-pro-7b": { input: 0, output: 0 },
+
+  // Jev (TypeSafe AI) -- https://docs.typesafe.ai (confirmed 2026-09-23).
+  // $0.042 / 1M input tokens = 4.2 cents / 1M; output tokens are free since
+  // Jev never generates text, only a typed answer per declared question.
+  "jev-latest": { input: 4.2, output: 0 },
+  "jev-preview": { input: 4.2, output: 0 },
+  "jev-1.13.0": { input: 4.2, output: 0 },
 };
 
 // Default pricing for unknown models
