@@ -33,7 +33,8 @@ export type LlmProvider =
   | "deepseek"
   | "perplexity"
   | "lm_studio"
-  | "jev";
+  | "jev"
+  | "openrouter";
 
 export type HttpMethod = "GET" | "POST";
 
@@ -214,6 +215,7 @@ export const LLM_PROVIDERS: LlmProvider[] = [
   "perplexity",
   "lm_studio",
   "jev",
+  "openrouter",
 ];
 
 /**
@@ -323,12 +325,20 @@ export const PROVIDER_MODELS: Record<LlmProvider, readonly string[]> = {
   ] as const,
   lm_studio: [] as const, // any model name is valid on a custom server
   jev: ["jev-latest", "jev-preview", "jev-1.13.0"] as const,
+  // Suggestions only: OpenRouter routes any `vendor/model` id it lists, so any
+  // string is accepted (see isValidModelForProvider).
+  openrouter: [
+    "openai/gpt-5.6-terra",
+    "anthropic/claude-sonnet-5",
+    "deepseek/deepseek-v4-pro",
+  ] as const,
 } as const;
 
 /**
  * Check whether a model ID is valid for the given provider.
- * For `lm_studio`, any string is valid (returns true) since users
- * can run arbitrary models on their local server.
+ * For `lm_studio` and `openrouter`, any string is valid (returns true): users
+ * run arbitrary models on their own server, and OpenRouter routes free-form
+ * `vendor/model` ids.
  *
  * @param provider - The LLM provider to validate against
  * @param model - The model ID string to check
@@ -339,8 +349,8 @@ export function isValidModelForProvider(
   model: string
 ): boolean {
   const models = PROVIDER_MODELS[provider];
-  // lm_studio accepts any model string
-  if (provider === "lm_studio") return true;
+  // lm_studio and openrouter accept any model string
+  if (provider === "lm_studio" || provider === "openrouter") return true;
   return models.includes(model);
 }
 
@@ -1300,9 +1310,39 @@ export interface AiExecutionResponse {
   generated_media?: GeneratedMedia[];
 }
 
-/** Response from /prompt endpoint - returns just the generated prompt */
+/**
+ * A provider HTTP request, described rather than sent: what a caller holding
+ * its own provider key needs to make the same call ShapeShyft's invoke makes.
+ *
+ * The key itself is never part of it. Send it in `auth.header` as
+ * `auth.prefix + apiKey`, beside `headers`.
+ */
+export interface AiProviderRequest {
+  provider: LlmProvider;
+  model: string;
+  method: "POST";
+  /** Full chat URL. */
+  url: string;
+  /** Non-secret headers, e.g. `content-type`, `anthropic-version`. */
+  headers: Record<string, string>;
+  /**
+   * Where the key goes. OpenAI-compatible: `{ header: "Authorization",
+   * prefix: "Bearer " }`. Anthropic: `{ header: "x-api-key", prefix: "" }`.
+   */
+  auth: { header: string; prefix: string };
+  /** JSON body, exactly what invoke sends to the provider. */
+  body: Record<string, unknown>;
+}
+
+/** Response from /prompt endpoint - returns the generated prompt */
 export interface AiPromptResponse {
+  /** Human-readable, pasteable prompt. Always present. */
   prompt: string;
+  /**
+   * The provider request invoke would make. Present only when the caller
+   * passed `llm_provider`.
+   */
+  request?: AiProviderRequest;
 }
 
 // =============================================================================

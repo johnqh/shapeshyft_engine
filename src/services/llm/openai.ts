@@ -22,8 +22,6 @@ import {
   type LLMUsage,
   type ProviderConfig,
 } from "./types.js";
-import { getOpenAIAudioFormat } from "../../lib/media-constants.js";
-import { getModelCapabilities } from "../../config/providers.js";
 import {
   buildOutputStructureSection,
   buildResponseFormatSection,
@@ -32,8 +30,13 @@ import {
 import { normalizeFinishReason } from "./finish-reason.js";
 import { addUsage, compatibleUsage } from "./compatible-usage.js";
 import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
-import { cohereResponseFormat } from "./cohere-schema.js";
 import { readModelJson } from "./json-repair.js";
+import {
+  buildOpenAIChatBody,
+  type OpenAIChatDialect,
+  type StructuredOutputMode,
+} from "../../core/payload.js";
+import { openAIStructuredText } from "../../core/response.js";
 
 /** Usage from a Responses API response, which names its fields differently. */
 function responsesUsage(response: OpenAI.Responses.Response): LLMUsage {
@@ -67,15 +70,11 @@ function responsesUsage(response: OpenAI.Responses.Response): LLMUsage {
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 
-/**
- * How a provider is made to return the endpoint's schema.
- *
- * - `tool_call`: a `structured_response` function with a forced `tool_choice`.
- * - `response_format`: Cohere's `{ type: "json_object", schema }`, read from
- *   the message content. Cohere's compatibility API does not accept
- *   `tool_choice`, so a tool call there could not be forced.
- */
-export type StructuredOutputMode = "tool_call" | "response_format";
+export {
+  tokenLimitParamFor,
+  type StructuredOutputMode,
+  type TokenLimitParam,
+} from "../../core/payload.js";
 
 class OpenAIProviderError extends Error {
   details?: Record<string, unknown>;
@@ -87,83 +86,18 @@ class OpenAIProviderError extends Error {
   }
 }
 
-/**
- * What a provider calls its cap on generated tokens.
- *
- * OpenAI's own newer models reject `max_tokens` outright —
- * "Unsupported parameter: 'max_tokens' is not supported with this model. Use
- * 'max_completion_tokens' instead" — while the OpenAI-*compatible* third
- * parties served by this same class (DeepSeek, Mistral, xAI, Perplexity) know
- * only `max_tokens`. One class, two vocabularies, so the caller says which.
- */
-export type TokenLimitParam = "max_tokens" | "max_completion_tokens";
-
-/**
- * OpenAI models that reject `max_tokens`.
- *
- * The reasoning-era families — GPT-5 and the o-series. Everything before them
- * (GPT-4o, GPT-4.1) still takes `max_tokens`, and every OpenAI-compatible third
- * party knows only that, so the rule is deliberately narrow rather than
- * "OpenAI always uses the new name".
- *
- * Matched on the family prefix, not an exhaustive list: the point of a family
- * is that its next member behaves like the last, and a list of exact ids would
- * be wrong the day one ships.
- */
-const REQUIRES_MAX_COMPLETION_TOKENS = /^(gpt-5|o[1-9])/i;
-
-/**
- * What to call the output cap for this provider and model.
- *
- * Both halves matter. The provider decides the vocabulary available; the model
- * decides which of it applies, and the model is chosen per endpoint rather than
- * per provider — so this cannot be settled when the client is constructed.
- */
-export function tokenLimitParamFor(
-  isOpenAi: boolean,
-  model: string
-): TokenLimitParam {
-  return isOpenAi && REQUIRES_MAX_COMPLETION_TOKENS.test(model)
-    ? "max_completion_tokens"
-    : "max_tokens";
-}
-
 export class OpenAIProvider implements ILLMProvider {
   readonly providerName = "openai" as const;
   private client: OpenAI;
   private defaultModel: string;
 
-  private disableThinking: boolean;
-
-  /** Whether this client talks to OpenAI itself, or an OpenAI-compatible third party. */
-  private isOpenAi: boolean;
-
-  private structuredOutput: StructuredOutputMode;
-
-  /** Request fields that ask for structured output, in this provider's dialect. */
-  private structuredOutputParams(
-    outputSchema: LLMRequest["outputSchema"]
-  ): Record<string, unknown> {
-    if (this.structuredOutput === "response_format") {
-      return { response_format: cohereResponseFormat(outputSchema) };
-    }
-    return {
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "structured_response",
-            description: "Generate structured response matching the schema",
-            parameters: outputSchema as Record<string, unknown>,
-          },
-        },
-      ],
-      tool_choice: {
-        type: "function",
-        function: { name: "structured_response" },
-      },
-    };
-  }
+  /**
+   * This provider's quirks of the chat-completions dialect (DeepSeek's
+   * thinking switch, OpenAI's token-cap name, Cohere's response_format). The
+   * body itself is built by `buildOpenAIChatBody` in `core/payload.ts`, the
+   * same builder `/prompt` describes requests with.
+   */
+  private dialect: OpenAIChatDialect;
 
   constructor(
     config: ProviderConfig,
@@ -197,9 +131,11 @@ export class OpenAIProvider implements ILLMProvider {
       structuredOutput?: StructuredOutputMode;
     } = {}
   ) {
-    this.disableThinking = options.disableThinking ?? false;
-    this.isOpenAi = options.isOpenAi ?? false;
-    this.structuredOutput = options.structuredOutput ?? "tool_call";
+    this.dialect = {
+      disableThinking: options.disableThinking ?? false,
+      isOpenAi: options.isOpenAi ?? false,
+      structuredOutput: options.structuredOutput ?? "tool_call",
+    };
     if (!config.apiKey) {
       throw new Error("OpenAI API key is required");
     }
@@ -223,73 +159,14 @@ export class OpenAIProvider implements ILLMProvider {
 
     const model = request.model ?? this.defaultModel;
     const startTime = Date.now();
-    const caps = getModelCapabilities(model);
     const generatedMedia: GeneratedMedia[] = [];
 
-    // Build user message content (multimodal)
-    const userContent: OpenAI.Chat.ChatCompletionContentPart[] = [];
-
-    if (request.media?.length) {
-      for (const m of request.media) {
-        if (m.type === "image") {
-          userContent.push({
-            type: "image_url",
-            image_url: {
-              url:
-                m.format === "base64"
-                  ? `data:${m.mimeType};base64,${m.data}`
-                  : m.data,
-            },
-          });
-        }
-        if (m.type === "audio") {
-          // Format already validated at capability validation layer
-          const format = getOpenAIAudioFormat(m.mimeType);
-          userContent.push({
-            type: "input_audio",
-            input_audio: {
-              data: m.data,
-              format,
-            },
-          } as OpenAI.Chat.ChatCompletionContentPart);
-        }
-      }
-    }
-
-    userContent.push({ type: "text", text: request.prompt });
-
-    // Build messages array
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-    if (request.systemPrompt) {
-      messages.push({ role: "system", content: request.systemPrompt });
-    }
-    messages.push({ role: "user", content: userContent });
-
-    // Audio output configuration - ONLY enable when endpoint expects audio output
-    const modalities: ("text" | "audio")[] = ["text"];
-    let audioConfig: { voice: string; format: string } | undefined;
-
-    if (request.expectsMediaOutput?.audio && caps.audioOutput) {
-      modalities.push("audio");
-      // V1: Output audio format is fixed to mp3
-      audioConfig = {
-        voice: "alloy", // V1: Fixed to "alloy"
-        format: "mp3", // V1: Fixed to "mp3"
-      };
-    }
-
+    // The same body buildApiPayload() and /prompt describe; only the
+    // transport flag is added here.
     const response = (await this.client.chat.completions.create({
-      model,
-      messages,
-      ...(audioConfig ? { modalities, audio: audioConfig } : {}),
-      ...this.structuredOutputParams(request.outputSchema),
-      // Off where the model reasons by default: thinking mode rejects
-      // `tool_choice` outright, so this is what keeps the forced call legal.
-      ...(this.disableThinking ? { thinking: { type: "disabled" } } : {}),
-      temperature: request.temperature ?? 0,
-      [tokenLimitParamFor(this.isOpenAi, model)]: request.maxTokens,
+      ...buildOpenAIChatBody({ ...request, model }, this.dialect),
       stream: false,
-    } as OpenAI.Chat.ChatCompletionCreateParams)) as OpenAI.Chat.ChatCompletion;
+    } as unknown as OpenAI.Chat.ChatCompletionCreateParams)) as OpenAI.Chat.ChatCompletion;
 
     const latencyMs = Date.now() - startTime;
 
@@ -327,28 +204,22 @@ export class OpenAIProvider implements ILLMProvider {
 
     // Extract the structured response: the forced function call's arguments,
     // or the message content in response_format mode.
-    let rawResponse: string;
-    if (this.structuredOutput === "response_format") {
-      const text = response.choices[0]?.message.content;
-      if (typeof text !== "string" || text.length === 0) {
-        throw attachUsage(
-          new Error("Expected JSON message content from the provider"),
-          usage,
-          response.model
-        );
-      }
-      rawResponse = text;
-    } else {
-      const toolCall = response.choices[0]?.message.tool_calls?.[0];
-      if (!toolCall || toolCall.function.name !== "structured_response") {
-        throw attachUsage(
-          new Error("Expected function call response from OpenAI"),
-          usage,
-          response.model
-        );
-      }
-      rawResponse = toolCall.function.arguments;
+    const structuredText = openAIStructuredText(
+      response.choices[0]?.message,
+      this.dialect.structuredOutput
+    );
+    if (structuredText === undefined) {
+      throw attachUsage(
+        new Error(
+          this.dialect.structuredOutput === "response_format"
+            ? "Expected JSON message content from the provider"
+            : "Expected function call response from OpenAI"
+        ),
+        usage,
+        response.model
+      );
     }
+    const rawResponse = structuredText;
 
     const finishReason = normalizeFinishReason(
       response.choices[0]?.finish_reason
@@ -802,66 +673,9 @@ export class OpenAIProvider implements ILLMProvider {
   }
 
   buildApiPayload(request: LLMRequest): Record<string, unknown> {
-    const model = request.model ?? this.defaultModel;
-    const caps = getModelCapabilities(model);
-
-    // Build user message content (multimodal)
-    const userContent: Array<Record<string, unknown>> = [];
-
-    if (request.media?.length) {
-      for (const m of request.media) {
-        if (m.type === "image") {
-          userContent.push({
-            type: "image_url",
-            image_url: {
-              url:
-                m.format === "base64"
-                  ? `data:${m.mimeType};base64,${m.data}`
-                  : m.data,
-            },
-          });
-        }
-        if (m.type === "audio") {
-          const format = getOpenAIAudioFormat(m.mimeType);
-          userContent.push({
-            type: "input_audio",
-            input_audio: {
-              data: m.data,
-              format,
-            },
-          });
-        }
-      }
-    }
-
-    userContent.push({ type: "text", text: request.prompt });
-
-    // Build messages array
-    const messages: Array<Record<string, unknown>> = [];
-    if (request.systemPrompt) {
-      messages.push({ role: "system", content: request.systemPrompt });
-    }
-    messages.push({ role: "user", content: userContent });
-
-    // Audio output configuration
-    const modalities: string[] = ["text"];
-    let audioConfig: Record<string, unknown> | undefined;
-
-    if (request.expectsMediaOutput?.audio && caps.audioOutput) {
-      modalities.push("audio");
-      audioConfig = {
-        voice: "alloy",
-        format: "mp3",
-      };
-    }
-
-    return {
-      model,
-      messages,
-      ...(audioConfig ? { modalities, audio: audioConfig } : {}),
-      ...this.structuredOutputParams(request.outputSchema),
-      temperature: request.temperature ?? 0,
-      [tokenLimitParamFor(this.isOpenAi, model)]: request.maxTokens,
-    };
+    return buildOpenAIChatBody(
+      { ...request, model: request.model ?? this.defaultModel },
+      this.dialect
+    );
   }
 }

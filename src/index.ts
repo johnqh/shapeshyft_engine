@@ -33,3 +33,18 @@ export * from "./lib/media-conversion.js";
 export * from "./lib/capability-validator.js";
 export * from "./lib/reserved-fields.js";
 export * from "./lib/output-limit.js";
+// The pure request/response half, also served alone (RN-safe) at `./core`.
+export {
+  buildProviderRequest,
+  defaultModelFor,
+  PROVIDER_REQUEST_SUPPORTED,
+  parseProviderResponse,
+  ProviderResponseError,
+  buildOpenAIChatBody,
+  buildAnthropicMessagesBody,
+  openAIChatDialect,
+  type ProviderRequestInput,
+  type ParsedProviderResponse,
+  type ChatBodyInput,
+  type OpenAIChatDialect,
+} from "./core/index.js";

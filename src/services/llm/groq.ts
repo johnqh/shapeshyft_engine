@@ -8,6 +8,7 @@
 
 import Groq from "groq-sdk";
 import { toFile } from "groq-sdk/uploads";
+import type { ChatCompletionCreateParamsNonStreaming } from "groq-sdk/resources/chat/completions";
 import type {
   ILLMProvider,
   LLMRequest,
@@ -26,6 +27,7 @@ import { normalizeFinishReason } from "./finish-reason.js";
 import { compatibleUsage } from "./compatible-usage.js";
 import { attachUsage, getFailedInvocationUsage } from "./usage-error.js";
 import { readModelJson } from "./json-repair.js";
+import { buildOpenAIChatBody, openAIChatDialect } from "../../core/payload.js";
 import { estimateUsageCost } from "../../lib/cost-estimation.js";
 
 const DEFAULT_MODEL = "llama-3.3-70b-versatile";
@@ -280,40 +282,14 @@ export class GroqProvider implements ILLMProvider {
   ): Promise<LLMResponse> {
     const startTime = Date.now();
 
-    // Build messages
-    const messages: Groq.Chat.ChatCompletionMessageParam[] = [];
-
-    if (request.systemPrompt) {
-      messages.push({ role: "system", content: request.systemPrompt });
-    }
-
-    // For Groq chat models, we don't have native multimodal support
-    // Media should have been extracted and replaced with placeholders
-    messages.push({ role: "user", content: request.prompt });
-
-    // Use function calling for structured output
-    const tools: Groq.Chat.ChatCompletionTool[] = [
-      {
-        type: "function",
-        function: {
-          name: "structured_response",
-          description: "Generate structured response matching the schema",
-          parameters: request.outputSchema as Record<string, unknown>,
-        },
-      },
-    ];
-
-    const response = await this.client.chat.completions.create({
-      model,
-      messages,
-      tools,
-      tool_choice: {
-        type: "function",
-        function: { name: "structured_response" },
-      },
-      temperature: request.temperature ?? 0,
-      max_tokens: request.maxTokens,
-    });
+    // Text only: media was extracted and replaced with placeholders. The same
+    // body buildApiPayload() and /prompt describe.
+    const response = (await this.client.chat.completions.create(
+      buildOpenAIChatBody(
+        { ...request, model },
+        openAIChatDialect("groq")
+      ) as unknown as ChatCompletionCreateParamsNonStreaming
+    )) as Groq.Chat.ChatCompletion;
 
     const latencyMs = Date.now() - startTime;
 
@@ -363,32 +339,9 @@ export class GroqProvider implements ILLMProvider {
     }
 
     // For chat models, return chat completion format
-    const messages: Array<Record<string, unknown>> = [];
-
-    if (request.systemPrompt) {
-      messages.push({ role: "system", content: request.systemPrompt });
-    }
-    messages.push({ role: "user", content: request.prompt });
-
-    return {
-      model,
-      messages,
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "structured_response",
-            description: "Generate structured response matching the schema",
-            parameters: request.outputSchema,
-          },
-        },
-      ],
-      tool_choice: {
-        type: "function",
-        function: { name: "structured_response" },
-      },
-      temperature: request.temperature ?? 0,
-      max_tokens: request.maxTokens,
-    };
+    return buildOpenAIChatBody(
+      { ...request, model },
+      openAIChatDialect("groq")
+    );
   }
 }

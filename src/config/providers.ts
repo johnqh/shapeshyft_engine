@@ -19,6 +19,9 @@
  * - **deepseek**: DeepSeek V4.1 Flash and V4 Pro
  * - **perplexity**: Sonar models with live web search grounding
  * - **lm_studio**: Local LLM server (LM Studio or any OpenAI-compatible endpoint)
+ * - **openrouter**: OpenRouter, an OpenAI-compatible router. Model ids are
+ *   free-form `vendor/model`; pricing is looked up by the part after the slash
+ *   (the vendor's own id), since OpenRouter passes vendor prices through.
  * - **jev**: TypeSafe AI's Jev, a "System One" model. Text-only, no free-form
  *   generation -- see the Jev section below before assuming it behaves like
  *   the providers above.
@@ -208,6 +211,15 @@ export const PROVIDERS: ProviderConfig[] = [
     defaultModel: "jev-latest",
     requiresEndpointUrl: false,
   },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    description:
+      "One OpenAI-compatible API in front of many vendors; any vendor/model id OpenRouter lists",
+    allowsCustomModel: true,
+    defaultModel: "openai/gpt-5.6-terra",
+    requiresEndpointUrl: false,
+  },
 ];
 
 // =============================================================================
@@ -377,6 +389,13 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
   // Jev (TypeSafe AI) -- https://docs.typesafe.ai/models
   // Aliases move when a new release ships; jev-1.13.0 pins the current one.
   jev: ["jev-latest", "jev-preview", "jev-1.13.0"],
+  // OpenRouter -- https://openrouter.ai/models. Suggestions only: any
+  // `vendor/model` id it lists is accepted (allowsCustomModel).
+  openrouter: [
+    "openai/gpt-5.6-terra",
+    "anthropic/claude-sonnet-5",
+    "deepseek/deepseek-v4-pro",
+  ],
 };
 
 // =============================================================================
@@ -1866,7 +1885,17 @@ export function findModelPricing(
   options: ModelPricingLookup = {}
 ): ModelPricing | undefined {
   if (options.provider === "lm_studio") return FREE_PRICING;
-  return catalogPricing(model) ?? catalogPricing(options.configuredModel);
+  const found =
+    catalogPricing(model) ?? catalogPricing(options.configuredModel);
+  if (found || options.provider !== "openrouter") return found;
+  // OpenRouter names a model `vendor/model`; the vendor's own id follows the
+  // slash. Only for OpenRouter: Groq's catalog ids contain a slash too.
+  const vendorId = (id: string | null | undefined) =>
+    id?.includes("/") ? id.slice(id.indexOf("/") + 1) : undefined;
+  return (
+    catalogPricing(vendorId(model)) ??
+    catalogPricing(vendorId(options.configuredModel))
+  );
 }
 
 /**

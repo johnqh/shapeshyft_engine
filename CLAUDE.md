@@ -11,6 +11,14 @@ Stateless core shared by `shapeshyft_api` and `shaperouter_api` (via
 - `@sudobility/shapeshyft_engine` — `createLLMProvider`, provider adapters,
   provider/model catalog (`config/providers`), prompt builder, `ApiHelper`,
   media handling, capability validation, reserved fields, output limits.
+- `@sudobility/shapeshyft_engine/core` — the pure request/response half, safe
+  for React Native and browsers: `buildProviderRequest` (URL, non-secret
+  headers, auth slot and body of the call invoke makes — never the key),
+  `parseProviderResponse` (structured answer, stop reason, usage from a raw
+  reply), the body builders `buildOpenAIChatBody` / `buildAnthropicMessagesBody`,
+  `PROVIDER_ENDPOINTS`, `parseModelJson`. Its whole runtime import graph must be
+  relative, SDK-free, and free of `Buffer` / `process` / `node:*`;
+  `tests/unit/core-no-runtime-deps.test.ts` enforces it.
 - `@sudobility/shapeshyft_engine/types` — domain types and pure helpers. Must
   never gain a runtime `import`; `tests/unit/types-no-runtime-imports.test.ts`
   enforces it. Frontend packages (`shapeshyft_types`, `shaperouter_types`)
@@ -21,6 +29,23 @@ Stateless core shared by `shapeshyft_api` and `shaperouter_api` (via
 - Relative imports carry `.js` (`NodeNext`). The compiler rejects them otherwise.
 - Provider SDKs and `sharp` are optional peer dependencies.
 - Provider credentials arrive in `ProviderConfig`; the engine never looks them up.
+
+## One body per provider family
+
+The SDK adapters (`OpenAIProvider` for OpenAI and every OpenAI-compatible
+provider, `AnthropicProvider`, Groq's chat path) send the body
+`core/payload.ts` builds, and `buildApiPayload()` returns the same body, so what
+`/prompt` describes is what invoke sends. Provider quirks live in
+`openAIChatDialect(provider)` (DeepSeek's `thinking: disabled`, OpenAI's
+`max_completion_tokens`, Cohere's `response_format`, Groq's plain-string user
+turn). Not shared: OpenAI web search (Responses API, three calls), Gemini, Jev,
+LM Studio and Groq Whisper -- `buildProviderRequest` throws for those.
+
+## Call-time provider override
+
+`llm_provider` / `llm_model` are reserved input fields (stripped with
+`context`, `web_search`, `max_output_tokens`). `resolveProviderOverride` validates
+them; an omitted `llm_model` takes the catalog `defaultModel`.
 
 ## Commands
 

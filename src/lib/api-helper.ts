@@ -6,7 +6,9 @@
  */
 
 import type {
+  AiProviderRequest,
   LlmProvider,
+  MediaContent,
   PromptInput,
   ApiHelperRequestOutput,
   ApiHelperRequestInput,
@@ -24,6 +26,17 @@ import {
   PROVIDER_ENDPOINTS,
   type LLMRequest,
 } from "../services/llm/index.js";
+import { buildProviderRequest } from "../core/request.js";
+
+/** Input for {@link ApiHelper.providerRequest}. */
+export interface ProviderRequestPromptInput extends PromptInput {
+  /** Model id. Omitted: the provider catalog's `defaultModel`. */
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  media?: MediaContent[];
+  expectsMediaOutput?: { image?: boolean; audio?: boolean; video?: boolean };
+}
 
 // Re-export types from shared package
 export type {
@@ -49,6 +62,8 @@ function getProviderNotes(provider: LlmProvider): string {
       return "Note: This prompt is optimized for Google Gemini models";
     case "lm_studio":
       return "Note: This prompt is designed for custom LLM servers";
+    case "openrouter":
+      return "Note: This prompt is sent through OpenRouter to the model it names";
     case "jev":
       return "Note: Jev does not take a pasteable chat prompt -- it answers typed Choice/Score/Noul questions built from the output schema. Use buildApiPayload() for its actual request shape.";
     default:
@@ -164,6 +179,30 @@ export const ApiHelper = {
       endpointUrl,
       provider: input.provider,
     };
+  },
+
+  /**
+   * The provider request invoke makes for this input: the system and user
+   * prompts from {@link ApiHelper.buildLegacyPrompts} (what invoke sends, not
+   * the minimal prompt {@link ApiHelper.request} uses), in the body
+   * `buildProviderRequest` builds -- the builder the adapters send with.
+   * Contains no key.
+   *
+   * @throws Error for a provider `buildProviderRequest` cannot describe
+   */
+  providerRequest(input: ProviderRequestPromptInput): AiProviderRequest {
+    const prompts = ApiHelper.buildLegacyPrompts(input);
+    return buildProviderRequest({
+      provider: input.provider,
+      model: input.model,
+      systemPrompt: prompts.system,
+      prompt: prompts.user,
+      outputSchema: input.outputSchema ?? { type: "object" },
+      temperature: input.temperature,
+      maxTokens: input.maxTokens,
+      media: input.media,
+      expectsMediaOutput: input.expectsMediaOutput,
+    });
   },
 
   /**

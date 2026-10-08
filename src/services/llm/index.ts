@@ -1,7 +1,8 @@
 /**
  * @fileoverview LLM provider factory and exports
  * @description Creates the appropriate LLM provider instance based on provider type.
- * OpenAI-compatible providers (Mistral, xAI, DeepSeek, Perplexity, Cohere) reuse
+ * OpenAI-compatible providers (Mistral, xAI, DeepSeek, Perplexity, Cohere,
+ * OpenRouter) reuse
  * the OpenAIProvider class, each with its own base URL. Groq has a dedicated provider for Whisper transcription.
  */
 
@@ -13,6 +14,8 @@ import { GeminiProvider } from "./gemini.js";
 import { GroqProvider } from "./groq.js";
 import { CustomLLMProvider } from "./custom.js";
 import { JevProvider } from "./jev.js";
+import { OPENAI_COMPATIBLE_BASE_URLS } from "../../core/endpoints.js";
+import { openAIChatDialect } from "../../core/payload.js";
 
 export type {
   ILLMProvider,
@@ -34,7 +37,7 @@ export function createLLMProvider(
     case "openai":
       // The only caller that is OpenAI itself: its newer models name the output
       // cap `max_completion_tokens`, which the compatible providers do not know.
-      return new OpenAIProvider(config, { isOpenAi: true });
+      return new OpenAIProvider(config, openAIChatDialect("openai"));
     case "anthropic":
       return new AnthropicProvider(config);
     case "gemini":
@@ -46,6 +49,7 @@ export function createLLMProvider(
     case "mistral":
     case "xai":
     case "perplexity":
+    case "openrouter":
       return new OpenAIProvider({
         ...config,
         endpointUrl:
@@ -67,7 +71,7 @@ export function createLLMProvider(
           endpointUrl:
             config.endpointUrl ?? OPENAI_COMPATIBLE_BASE_URLS[providerType],
         },
-        { disableThinking: true }
+        openAIChatDialect("deepseek")
       );
     /*
       Cohere's native Chat API has its own request and response shape, but its
@@ -82,7 +86,7 @@ export function createLLMProvider(
           endpointUrl:
             config.endpointUrl ?? OPENAI_COMPATIBLE_BASE_URLS[providerType],
         },
-        { structuredOutput: "response_format" }
+        openAIChatDialect("cohere")
       );
     case "lm_studio":
       return new CustomLLMProvider(config);
@@ -93,33 +97,4 @@ export function createLLMProvider(
   }
 }
 
-/**
- * OpenAI-SDK base URLs for OpenAI-compatible providers (no /chat/completions —
- * the SDK appends the path). Used by the factory so these providers reach their
- * own API rather than api.openai.com.
- */
-const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LlmProvider, string>> = {
-  mistral: "https://api.mistral.ai/v1",
-  xai: "https://api.x.ai/v1",
-  deepseek: "https://api.deepseek.com/v1",
-  perplexity: "https://api.perplexity.ai",
-  cohere: "https://api.cohere.ai/compatibility/v1",
-};
-
-/**
- * Provider endpoint hints for Type 3/4 endpoints
- */
-export const PROVIDER_ENDPOINTS: Record<LlmProvider, string> = {
-  openai: "https://api.openai.com/v1/chat/completions",
-  anthropic: "https://api.anthropic.com/v1/messages",
-  gemini:
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-  mistral: "https://api.mistral.ai/v1/chat/completions",
-  cohere: "https://api.cohere.ai/compatibility/v1/chat/completions",
-  groq: "https://api.groq.com/openai/v1/chat/completions",
-  xai: "https://api.x.ai/v1/chat/completions",
-  deepseek: "https://api.deepseek.com/v1/chat/completions",
-  perplexity: "https://api.perplexity.ai/chat/completions",
-  lm_studio: "{custom_endpoint}",
-  jev: "https://api.typesafe.ai/v1/systemone",
-};
+export { PROVIDER_ENDPOINTS } from "../../core/endpoints.js";
