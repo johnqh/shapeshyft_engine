@@ -247,6 +247,8 @@ export const PROVIDER_MODELS: Record<LlmProvider, string[]> = {
     "gpt-4.1-nano",
     "gpt-4o",
     "gpt-4o-mini",
+    // Image generation
+    "gpt-image-1",
   ],
   anthropic: [
     // Current generation
@@ -548,6 +550,17 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     audioOutput: false,
     videoOutput: false,
     mediaFormats: { imageFormats: ["url", "base64"] },
+  },
+  // Image generation. visionInput covers reference images sent to the
+  // images/edits endpoint. shapeshyft_api's image-provider sends base64 only.
+  "gpt-image-1": {
+    visionInput: true,
+    audioInput: false,
+    videoInput: false,
+    imageOutput: true,
+    audioOutput: false,
+    videoOutput: false,
+    mediaFormats: { imageFormats: ["base64"] },
   },
 
   // Anthropic — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -1479,6 +1492,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "gpt-4.1-nano": { input: 10, output: 40, cachedInput: 2.5, searchCall: 2.5 }, // Shuts down 2026-10-23
   "gpt-4o": { input: 250, output: 1000, cachedInput: 125, searchCall: 2.5 },
   "gpt-4o-mini": { input: 15, output: 60, cachedInput: 7.5, searchCall: 2.5 },
+  // gpt-image-1: text input $5/1M, image-output tokens $40/1M. image-provider
+  // reports token usage, so input/output drive the estimate; imageOutput is the
+  // per-image fallback (~$0.04 medium 1024^2; 0.011 low – 0.167 high, quality-
+  // dependent). Verify on OpenAI's pricing page; model may deprecate 2026-10-23.
+  "gpt-image-1": { input: 500, output: 4000, imageInput: 1, imageOutput: 4.2 },
 
   // Anthropic — https://platform.claude.com/docs/en/about-claude/pricing
   // 4.6 and later: full 1M context at standard rates, no long-context surcharge.
